@@ -1,0 +1,29 @@
+```yaml
+name: JLC Auto Sign
+
+on:
+  schedule:
+    - cron: '0 */0 * * *'  # 每 6 小时执行一次，UTC 时间
+
+  workflow_dispatch:
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Run Sign Script
+      env:
+        TOKEN_LIST: ${{ secrets.TOKEN_LIST }}
+        SEND_KEY_LIST: ${{ secrets.SEND_KEY_LIST }}
+      run: |
+        python main.py
+```
+
+---
+
+## 📄 License
+
+本项目遵循 MIT License，欢迎自由使用和修改。
