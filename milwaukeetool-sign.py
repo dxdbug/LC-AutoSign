@@ -366,6 +366,8 @@ def sendNotification():
 
 
 def main():
+    # 新增的调试代码：打印钉钉Webhook配置值（只显示前20位，避免泄露）
+    print(f"📝 钉钉Webhook配置值：{DINGTALK_WEBHOOK_URL[:20]}...")
     print("=" * 60)
     print("🚀 Milwaukee 签到（成功失败全推送 + 钉钉+企业微信+Server酱）")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
