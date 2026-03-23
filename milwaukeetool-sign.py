@@ -153,23 +153,37 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
         print(f"\n⚠️  企业微信发送异常: {str(e)}")
 
 
-# ========== 钉钉机器人通知（新增） ==========
+# ========== 钉钉机器人通知（修复版：支持加签 + 详细日志） ==========
+import hmac
+import base64
+from urllib.parse import quote_plus
+
 def send_dingtalk_notification(failed_accounts, total_count, success_count, all_result):
     if not DINGTALK_WEBHOOK_URL or DINGTALK_WEBHOOK_URL.strip() == "":
         print("\n⚠️  未配置钉钉Webhook")
         return
 
+    # 拆分Webhook和加签密钥（如果有）
+    webhook_url = DINGTALK_WEBHOOK_URL.strip()
+    secret = ""
+    # 如果你配置了加签，格式为 "webhook_url|secret"，比如：
+    # "https://oapi.dingtalk.com/robot/send?access_token=xxx|SECxxx"
+    if "|" in webhook_url:
+        webhook_url, secret = webhook_url.split("|", 1)
+        secret = secret.strip()
+
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
     all_result_content = all_result[:1500] if all_result else "无返回信息"
 
+    # 确保内容包含关键词（避免安全校验失败）
     text = (
         f"### Milwaukee 签到结果\n"
         f"**时间**：{now_str}\n\n"
         f"✅ 成功：{success_count}/{total_count}\n"
         f"❌ 失败：{len(failed_accounts)}/{total_count}\n\n"
         f"**失败详情**：\n{fail_details}\n\n"
-        f"**完整结果**：\n{all_result_content}..."  # 防止过长
+        f"**完整结果**：\n{all_result_content}..."
     )
 
     msg = {
@@ -180,15 +194,37 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count, all_
         }
     }
 
-    try:
-        resp = requests.post(DINGTALK_WEBHOOK_URL, json=msg, timeout=5)
-        if resp.status_code == 200 and resp.json().get("errcode") == 0:
-            print("📢 钉钉通知发送成功")
-        else:
-            print(f"⚠️ 钉钉通知失败: {resp.text}")
-    except Exception as e:
-        print(f"⚠️ 钉钉发送异常: {str(e)}")
+    # 处理加签逻辑
+    headers = {"Content-Type": "application/json"}
+    if secret:
+        timestamp = str(round(time.time() * 1000))
+        secret_enc = secret.encode('utf-8')
+        string_to_sign = f"{timestamp}\n{secret}"
+        string_to_sign_enc = string_to_sign.encode('utf-8')
+        hmac_code = hmac.new(secret_enc, string_to_sign_enc, digestmod=hashlib.sha256).digest()
+        sign = quote_plus(base64.b64encode(hmac_code))
+        webhook_url = f"{webhook_url}&timestamp={timestamp}&sign={sign}"
 
+    try:
+        # 发送请求并打印详细日志
+        print(f"\n📤 钉钉推送URL：{webhook_url[:50]}...")  # 隐藏部分敏感信息
+        print(f"📤 钉钉推送内容：{text[:100]}...")
+        resp = requests.post(webhook_url, json=msg, headers=headers, timeout=10)
+        
+        # 打印完整响应（关键：定位失败原因）
+        print(f"📤 钉钉响应状态码：{resp.status_code}")
+        print(f"📤 钉钉响应内容：{resp.text}")
+        
+        if resp.status_code == 200:
+            resp_json = resp.json()
+            if resp_json.get("errcode") == 0:
+                print("✅ 钉钉通知发送成功")
+            else:
+                print(f"❌ 钉钉通知失败：{resp_json.get('errmsg', '未知错误')}")
+        else:
+            print(f"❌ 钉钉通知失败：HTTP状态码 {resp.status_code}，响应 {resp.text}")
+    except Exception as e:
+        print(f"❌ 钉钉发送异常：{str(e)}")
 
 # ========== Server酱 ==========
 def send_msg_by_server(send_key, title, content):
