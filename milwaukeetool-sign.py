@@ -41,7 +41,7 @@ POINT_URL = "https://service.milwaukeetool.cn/api/v1/user"  # 积分接口
 # ================= 防检测UA（你原版基础微改） =================
 def get_headers():
     chrome = random.randint(132, 136)
-    xweb = random.randint(19027, 18960)
+    xweb = random.randint(18960,19027)
     ua = (
         f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
         f"Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI "
@@ -143,7 +143,7 @@ def format_sign_status(json_data, client_id=None):
         output.append("【使用统计】")
         output.append(f"  📤 今日发送：{send_num}")
         output.append(f"  📥 今日使用：{used_num}")
-        output.append(f"  💾 可用额度：{available_num}")
+        output.append(f"  💾 可用积分：{available_num}")
         output.append("")
         output.append("=" * 50)
         output.append(f" 报告时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
