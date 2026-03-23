@@ -11,25 +11,25 @@ from datetime import datetime
 GLOBAL_METHOD = "add.signon.item"
 GLOBAL_STYPE = 1
 
-# 环境变量配置（统一规范）
+# 环境变量读取（适配 GitHub Actions Secrets）
 MILWAUKEETOOL_TOKEN_LIST = os.getenv('MILWAUKEETOOL_TOKEN_LIST', '')
 MILWAUKEETOOL_CLIENT_ID = os.getenv('MILWAUKEETOOL_CLIENT_ID', '')
 SEND_KEY_LIST = os.getenv('SEND_KEY_LIST', '')
+
+# 修复：拆分变量定义（核心语法错误）
 WEBHOOK_URL = os.getenv('WEBHOOK_URL', '')
 DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
-
-# 修复：独立定义变量（核心语法错误修复）
 SHOW_RAW_RESPONSE = True
-
-# 建议改为环境变量配置，提高安全性
-SECRET = os.getenv('MILWAUKEETOOL_SECRET', "36affdc58f50e1035649abc808c22b48")
-APPKEY = os.getenv('MILWAUKEETOOL_APPKEY', "76472358")
-PLATFORM = "MP-WEIXIN"
-FORMAT = "json"
-URL = "https://service.milwaukeetool.cn/api/v1/signon"
 
 FAILED_LOG = []
 RESULT_LOG = []
+
+# 固定配置（建议也可移到 Secrets 中）
+SECRET = "36affdc58f50e1035649abc808c22b48"
+APPKEY = "76472358"
+PLATFORM = "MP-WEIXIN"
+FORMAT = "json"
+URL = "https://service.milwaukeetool.cn/api/v1/signon"
 
 HEADERS = {
     "Host": "service.milwaukeetool.cn",
@@ -48,7 +48,6 @@ HEADERS = {
 
 
 def generate_sign(params_dict):
-    """生成签名（核心函数）"""
     sorted_keys = sorted(params_dict.keys())
     s = SECRET
     for key in sorted_keys:
@@ -61,7 +60,6 @@ def generate_sign(params_dict):
 
 
 def format_sign_status(json_data, client_id=None):
-    """格式化签到状态返回信息"""
     try:
         if isinstance(json_data, str):
             data = json.loads(json_data)
@@ -155,7 +153,7 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
         print(f"\n⚠️  企业微信发送异常: {str(e)}")
 
 
-# ========== 钉钉机器人通知 ==========
+# ========== 钉钉机器人通知（新增） ==========
 def send_dingtalk_notification(failed_accounts, total_count, success_count, all_result):
     if not DINGTALK_WEBHOOK_URL or DINGTALK_WEBHOOK_URL.strip() == "":
         print("\n⚠️  未配置钉钉Webhook")
@@ -163,8 +161,6 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count, all_
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
-    
-    # 修复：防止空字符串切片错误
     all_result_content = all_result[:1500] if all_result else "无返回信息"
 
     text = (
@@ -173,7 +169,7 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count, all_
         f"✅ 成功：{success_count}/{total_count}\n"
         f"❌ 失败：{len(failed_accounts)}/{total_count}\n\n"
         f"**失败详情**：\n{fail_details}\n\n"
-        f"**完整结果**：\n{all_result_content}..."
+        f"**完整结果**：\n{all_result_content}..."  # 防止过长
     )
 
     msg = {
@@ -206,7 +202,6 @@ def send_msg_by_server(send_key, title, content):
 
 
 def signAndList(token, client_id, account_index=1):
-    """执行签到并查询签到列表"""
     now = datetime.now()
     timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
     payload = {
@@ -229,13 +224,12 @@ def signAndList(token, client_id, account_index=1):
     payload["sign"] = sign_val
 
     try:
-        # 随机延迟，避免高频请求
         delay = random.uniform(1.0, 2.5)
         print(f"      ⏳ 等待 {delay:.1f}s...")
         time.sleep(delay)
 
         response = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
-        # 修复：捕获JSON解析错误
+        # 捕获JSON解析错误
         try:
             resp_json = response.json()
         except JSONDecodeError:
@@ -245,10 +239,10 @@ def signAndList(token, client_id, account_index=1):
         msg = resp_json.get("msg", "") or resp_json.get("message", "") or str(resp_json)
 
         is_success = False
-        if code == 200 or "成功" in msg or "已签到" in msg:
+        if code == 200 or "成功" in msg or "已签到" in msg or "已簽到" in msg:
             is_success = True
 
-        # 记录结果日志
+        # 无论成功失败都加入推送日志
         result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
         RESULT_LOG.append(result_line)
 
@@ -270,7 +264,7 @@ def signAndList(token, client_id, account_index=1):
             }
             payload2["sign"] = generate_sign(payload2)
             resp2 = requests.post(URL, headers=HEADERS, json=payload2, timeout=20)
-            # 防护：处理非JSON响应
+            # 防护JSON解析错误
             try:
                 signResult = format_sign_status(resp2.json(), client_id=client_id)
             except JSONDecodeError:
@@ -293,12 +287,11 @@ def signAndList(token, client_id, account_index=1):
 
 
 def processAccount():
-    """处理所有账号签到"""
     tokenList = [t.strip() for t in MILWAUKEETOOL_TOKEN_LIST.split(',') if t.strip()]
     clientIdList = [cid.strip() for cid in MILWAUKEETOOL_CLIENT_ID.split(',') if cid.strip()]
 
     if not tokenList or not clientIdList:
-        print("❌ 缺少 token 或 client_id，请检查环境变量配置")
+        print("❌ 缺少 token 或 client_id")
         FAILED_LOG.append(("config", "缺少账号信息"))
         return 0, 0
 
@@ -306,7 +299,7 @@ def processAccount():
     tokenList = tokenList[:min_len]
     clientIdList = clientIdList[:min_len]
 
-    print(f"🔧 共 {min_len} 个账号待处理")
+    print(f"🔧 共 {min_len} 个账号")
 
     success = 0
     for i, (token, cid) in enumerate(zip(tokenList, clientIdList), 1):
@@ -319,8 +312,6 @@ def processAccount():
 
 
 def sendNotification():
-    """发送Server酱通知"""
-    # 修复：空日志防护
     if not RESULT_LOG:
         RESULT_LOG.append("本次执行无任何账号返回信息")
 
@@ -341,7 +332,6 @@ def sendNotification():
 
 
 def main():
-    """主函数"""
     print("=" * 60)
     print("🚀 Milwaukee 签到（成功失败全推送 + 钉钉+企业微信+Server酱）")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -349,8 +339,6 @@ def main():
 
     success_cnt, total_cnt = processAccount()
     all_result_str = "\n\n".join(RESULT_LOG) if RESULT_LOG else "无执行结果"
-    
-    # 推送通知
     sendNotification()
     send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
     send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
