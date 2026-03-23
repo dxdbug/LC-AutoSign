@@ -25,7 +25,7 @@ SHOW_RAW_RESPONSE = True
 # 1. 不加签：直接填Webhook地址，DINGTALK_SECRET留空
 # 2. 加签：DINGTALK_WEBHOOK填基础地址，DINGTALK_SECRET填加签密钥
 DINGTALK_WEBHOOK = "https://oapi.dingtalk.com/robot/send?access_token=8feae4728efa754660cf55c4e9b115202a7a22918e11a8f8c8f1d37b7bd5d856"
-DINGTALK_SECRET = "你的钉钉加签密钥（没有则留空）"
+DINGTALK_SECRET = "SECaa132c653e00775c00b565526a37932a1776525cb85303d3e913aa9e23ff40ec"
 
 FAILED_LOG = []
 RESULT_LOG = []
