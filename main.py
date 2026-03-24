@@ -13,7 +13,7 @@ from requests.exceptions import RequestException
 from collections import defaultdict
 
 TOKEN_LIST = os.getenv('TOKEN_LIST', '')
-SEND_KEY_LIST = os.getenv('SEND_KEY_LIST', '')
+# 移除SEND_KEY_LIST定义
 # 新增钉钉机器人配置（从环境变量读取）
 DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
 DINGTALK_SECRET = os.getenv('DINGTALK_SECRET', '')
@@ -51,18 +51,7 @@ def mask_json_customer_code(data):
 
 # ======== 推送通知 ========
 
-def send_msg_by_server(send_key, title, content):
-    push_url = f'https://sctapi.ftqq.com/{send_key}.send'
-    data = {
-        'text': title,
-        'desp': content
-    }
-    try:
-        response = requests.post(push_url, data=data)
-        return response.json()
-    except RequestException:
-        return None
-
+# 移除Server酱推送函数 send_msg_by_server
 
 def send_msg_by_dingtalk(title, content):
     """
@@ -146,10 +135,6 @@ def sign_in(access_token):
         sign_response.raise_for_status()
         sign_result = sign_response.json()
 
-        # 打印签到响应 JSON（已脱敏）
-        # print(f"🔍 [账号{mask_account(customer_code)}] 签到响应JSON:")
-        # print(json.dumps(mask_json_customer_code(sign_result), indent=2, ensure_ascii=False))
-
         # 检查签到是否成功
         if not sign_result.get('success'):
             message = sign_result.get('message', '未知错误')
@@ -204,78 +189,33 @@ def sign_in(access_token):
 def main():
     # 从 GitHub Secrets 获取配置
     AccessTokenList = [token.strip() for token in TOKEN_LIST.split(',') if token.strip()]
-    SendKeyList = [key.strip() for key in SEND_KEY_LIST.split(',') if key.strip()]
 
-    # 检查配置是否为空
+    # 仅检查TOKEN是否为空
     if not AccessTokenList:
         print("❌ 请设置 TOKENS")
         return
-        
-    if not SendKeyList:
-        print("❌ 请设置 SENDKEYS")
-        return
 
-    # 确保长度一致
-    min_length = min(len(AccessTokenList), len(SendKeyList))
-    AccessTokenList = AccessTokenList[:min_length]
-    SendKeyList = SendKeyList[:min_length]
+    print(f"🔧 共发现 {len(AccessTokenList)} 个账号需要签到")
 
-    print(f"🔧 共发现 {min_length} 个账号需要签到")
-
-    # 按 SendKey 分组
-    task_groups = defaultdict(list)
-    for access_token, send_key in zip(AccessTokenList, SendKeyList):
-        task_groups[send_key].append(access_token)
-
-    print(f"📊 共分为 {len(task_groups)} 个通知组")
-
-    # 顺序执行签到任务
-    group_results = {}
-    # 新增：收集所有签到结果用于钉钉推送
+    # 移除按SendKey分组逻辑，直接遍历所有账号
     all_dingtalk_results = []
 
-    for send_key, tokens in task_groups.items():
-        print(f"\n🚀 开始处理 SendKey: {send_key[:5]}... 的 {len(tokens)} 个账号")
-        results = []
+    print(f"\n🚀 开始处理所有账号签到")
+    for i, token in enumerate(AccessTokenList):
+        print(f"📝 处理第 {i+1}/{len(AccessTokenList)} 个账号...")
         
-        for i, token in enumerate(tokens):
-            print(f"📝 处理第 {i+1}/{len(tokens)} 个账号...")
-            
-            # 执行签到
-            result = sign_in(token)
-            if result is not None:
-                results.append(result)
-                all_dingtalk_results.append(result)  # 添加到钉钉推送列表
-            
-            # 如果不是最后一个账号，则等待随机时间（保留原有逻辑）
-            if i < len(tokens) - 1:
-                wait_time = random.randint(5, 15)
-                print(f"⏳ 等待 {wait_time} 秒后处理下一个账号...")
-                time.sleep(wait_time)
+        # 执行签到
+        result = sign_in(token)
+        if result is not None:
+            all_dingtalk_results.append(result)
         
-        group_results[send_key] = results
+        # 如果不是最后一个账号，则等待随机时间
+        if i < len(AccessTokenList) - 1:
+            wait_time = random.randint(5, 15)
+            print(f"⏳ 等待 {wait_time} 秒后处理下一个账号...")
+            time.sleep(wait_time)
 
-    # 推送通知 - 原Server酱逻辑
-    print("\n📬 开始检查是否需要发送Server酱通知...")
-    notification_sent = False
-    
-    for send_key, results in group_results.items():
-        if results:
-            content = "\n\n".join(results)
-            print(f"📤 检测到有金豆获取，准备发送通知给 SendKey: {send_key[:5]}...")
-            
-            response = send_msg_by_server(send_key, "嘉立创签到汇总", content)
-            
-            if response and response.get('code') == 0:
-                print(f"✅ Server酱通知发送成功！消息ID: {response.get('data', {}).get('pushid', '')}")
-                notification_sent = True
-            else:
-                error_msg = response.get('message') if response else '未知错误'
-                print(f"❌ Server酱通知发送失败！错误: {error_msg}")
-        else:
-            print(f"⏭️ SendKey: {send_key[:5]}... 组内无金豆获取，跳过通知")
-    
-    # 新增：钉钉机器人推送逻辑
+    # 仅保留钉钉推送逻辑
     print("\n📬 开始检查是否需要发送钉钉通知...")
     if all_dingtalk_results:
         dingtalk_content = "\n\n".join(all_dingtalk_results)
@@ -283,9 +223,6 @@ def main():
         send_msg_by_dingtalk("嘉立创签到汇总", dingtalk_content)
     else:
         print("⏭️ 无金豆获取，跳过钉钉通知")
-    
-    if not notification_sent:
-        print("ℹ️ 所有账号均未获取到金豆，无Server酱通知发送")
 
 
 # ======== 程序入口 ========
