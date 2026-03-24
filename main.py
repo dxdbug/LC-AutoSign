@@ -15,7 +15,7 @@ from collections import defaultdict
 TOKEN_LIST = os.getenv('TOKEN_LIST', '')
 SEND_KEY_LIST = os.getenv('SEND_KEY_LIST', '')
 # 新增钉钉机器人配置（从环境变量读取）
-DINGTALK_WEBHOOK = os.getenv('DINGTALK_WEBHOOK', '')
+DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
 DINGTALK_SECRET = os.getenv('DINGTALK_SECRET', '')
 
 # 接口配置
@@ -72,7 +72,7 @@ def send_msg_by_dingtalk(title, content):
     :return: 响应结果
     """
     # 未配置webhook则直接返回
-    if not DINGTALK_WEBHOOK:
+    if not DINGTALK_WEBHOOK_URL:
         print("⚠️ 钉钉机器人Webhook未配置，跳过钉钉推送")
         return None
     
@@ -98,9 +98,9 @@ def send_msg_by_dingtalk(title, content):
             string_to_sign_enc = string_to_sign.encode('utf-8')
             hmac_code = hmac.new(secret_enc, string_to_sign_enc, digestmod=hashlib.sha256).digest()
             sign = quote_plus(base64.b64encode(hmac_code))
-            request_url = f'{DINGTALK_WEBHOOK}&timestamp={timestamp}&sign={sign}'
+            request_url = f'{DINGTALK_WEBHOOK_URL}&timestamp={timestamp}&sign={sign}'
         else:
-            request_url = DINGTALK_WEBHOOK
+            request_url = DINGTALK_WEBHOOK_URL
         
         # 发送请求
         headers = {'Content-Type': 'application/json; charset=utf-8'}
