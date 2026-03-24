@@ -5,11 +5,18 @@ import json
 import time
 import random
 import os
+import hmac
+import hashlib
+import base64
+from urllib.parse import quote_plus
 from requests.exceptions import RequestException
 from collections import defaultdict
 
 TOKEN_LIST = os.getenv('TOKEN_LIST', '')
 SEND_KEY_LIST = os.getenv('SEND_KEY_LIST', '')
+# 新增钉钉机器人配置（从环境变量读取）
+DINGTALK_WEBHOOK = os.getenv('DINGTALK_WEBHOOK', '')
+DINGTALK_SECRET = os.getenv('DINGTALK_SECRET', '')
 
 # 接口配置
 url = 'https://m.jlc.com/api/activity/sign/signIn?source=3'
@@ -54,6 +61,64 @@ def send_msg_by_server(send_key, title, content):
         response = requests.post(push_url, data=data)
         return response.json()
     except RequestException:
+        return None
+
+
+def send_msg_by_dingtalk(title, content):
+    """
+    发送钉钉机器人消息
+    :param title: 消息标题
+    :param content: 消息内容
+    :return: 响应结果
+    """
+    # 未配置webhook则直接返回
+    if not DINGTALK_WEBHOOK:
+        print("⚠️ 钉钉机器人Webhook未配置，跳过钉钉推送")
+        return None
+    
+    # 构建钉钉消息体（Markdown格式）
+    msg = {
+        "msgtype": "markdown",
+        "markdown": {
+            "title": title,
+            "text": f"# {title}\n\n{content}"
+        },
+        "at": {
+            "isAtAll": False  # 不@所有人
+        }
+    }
+    
+    try:
+        # 如果配置了密钥，需要加签
+        timestamp = str(round(time.time() * 1000))
+        if DINGTALK_SECRET:
+            # 加签计算
+            secret_enc = DINGTALK_SECRET.encode('utf-8')
+            string_to_sign = f'{timestamp}\n{DINGTALK_SECRET}'
+            string_to_sign_enc = string_to_sign.encode('utf-8')
+            hmac_code = hmac.new(secret_enc, string_to_sign_enc, digestmod=hashlib.sha256).digest()
+            sign = quote_plus(base64.b64encode(hmac_code))
+            request_url = f'{DINGTALK_WEBHOOK}&timestamp={timestamp}&sign={sign}'
+        else:
+            request_url = DINGTALK_WEBHOOK
+        
+        # 发送请求
+        headers = {'Content-Type': 'application/json; charset=utf-8'}
+        response = requests.post(
+            request_url,
+            headers=headers,
+            data=json.dumps(msg, ensure_ascii=False).encode('utf-8')
+        )
+        result = response.json()
+        
+        if result.get('errcode') == 0:
+            print("✅ 钉钉消息发送成功")
+            return result
+        else:
+            print(f"❌ 钉钉消息发送失败: {result.get('errmsg', '未知错误')}")
+            return result
+    except Exception as e:
+        print(f"❌ 钉钉消息发送异常: {str(e)}")
         return None
 
 
@@ -166,6 +231,8 @@ def main():
 
     # 顺序执行签到任务
     group_results = {}
+    # 新增：收集所有签到结果用于钉钉推送
+    all_dingtalk_results = []
 
     for send_key, tokens in task_groups.items():
         print(f"\n🚀 开始处理 SendKey: {send_key[:5]}... 的 {len(tokens)} 个账号")
@@ -178,8 +245,9 @@ def main():
             result = sign_in(token)
             if result is not None:
                 results.append(result)
+                all_dingtalk_results.append(result)  # 添加到钉钉推送列表
             
-            # 如果不是最后一个账号，则等待随机时间
+            # 如果不是最后一个账号，则等待随机时间（保留原有逻辑）
             if i < len(tokens) - 1:
                 wait_time = random.randint(5, 15)
                 print(f"⏳ 等待 {wait_time} 秒后处理下一个账号...")
@@ -187,8 +255,8 @@ def main():
         
         group_results[send_key] = results
 
-    # 推送通知 - 只在有获取到金豆时才发送
-    print("\n📬 开始检查是否需要发送通知...")
+    # 推送通知 - 原Server酱逻辑
+    print("\n📬 开始检查是否需要发送Server酱通知...")
     notification_sent = False
     
     for send_key, results in group_results.items():
@@ -199,16 +267,25 @@ def main():
             response = send_msg_by_server(send_key, "嘉立创签到汇总", content)
             
             if response and response.get('code') == 0:
-                print(f"✅ 通知发送成功！消息ID: {response.get('data', {}).get('pushid', '')}")
+                print(f"✅ Server酱通知发送成功！消息ID: {response.get('data', {}).get('pushid', '')}")
                 notification_sent = True
             else:
                 error_msg = response.get('message') if response else '未知错误'
-                print(f"❌ 通知发送失败！错误: {error_msg}")
+                print(f"❌ Server酱通知发送失败！错误: {error_msg}")
         else:
             print(f"⏭️ SendKey: {send_key[:5]}... 组内无金豆获取，跳过通知")
     
+    # 新增：钉钉机器人推送逻辑
+    print("\n📬 开始检查是否需要发送钉钉通知...")
+    if all_dingtalk_results:
+        dingtalk_content = "\n\n".join(all_dingtalk_results)
+        print(f"📤 检测到有金豆获取，准备发送钉钉通知...")
+        send_msg_by_dingtalk("嘉立创签到汇总", dingtalk_content)
+    else:
+        print("⏭️ 无金豆获取，跳过钉钉通知")
+    
     if not notification_sent:
-        print("ℹ️ 所有账号均未获取到金豆，无通知发送")
+        print("ℹ️ 所有账号均未获取到金豆，无Server酱通知发送")
 
 
 # ======== 程序入口 ========
