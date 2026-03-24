@@ -17,5 +17,6 @@ jobs:
       env:
         TOKEN_LIST: ${{ secrets.TOKEN_LIST }}
         SEND_KEY_LIST: ${{ secrets.SEND_KEY_LIST }}
+        DINGTALK_WEBHOOK_URL: ${{ secrets.DINGTALK_WEBHOOK_URL }}
       run: |
         python main.py
