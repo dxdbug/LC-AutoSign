@@ -21,6 +21,7 @@ MILWAUKEETOOL_CLIENT_ID = os.getenv('MILWAUKEETOOL_CLIENT_ID', '')
 # ========== 通知渠道：全部从环境变量读取 ==========
 WECHAT_WEBHOOK_URL = os.getenv('WECHAT_WEBHOOK_URL', '')
 DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
+SERVERCHAN_SENDKEY = os.getenv('SERVERCHAN_SENDKEY', '')  # 补全缺失变量
 
 FAILED_LOG = []
 RESULT_LOG = []
@@ -77,20 +78,26 @@ def generate_sign(params_dict):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
 
-# ================= 积分查询（只加这个，极简） =================
+# ================= 积分查询（已修复：接口参数+返回值解析） =================
 def get_points(token, client_id):
     try:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         payload = {
-            "token": token, "client_id": client_id, "appkey": APPKEY,
-            "format": FORMAT, "timestamp": ts, "platform": PLATFORM,
-            "method": "get.user.item"
+            "token": token,
+            "client_id": client_id,
+            "appkey": APPKEY,
+            "format": FORMAT,
+            "timestamp": ts,
+            "platform": PLATFORM,
+            "method": "get.user.info"  # 修复：正确接口方法
         }
         payload["sign"] = generate_sign(payload)
         res = requests.post(POINT_URL, headers=HEADERS, json=payload, timeout=10)
         data = res.json()
-        return int(data.get("data", {}).get("get_user_money", {}).get("points", 0))
-    except:
+        # 修复：正确解析积分字段
+        return int(data.get("data", {}).get("points", 0))
+    except Exception as e:
+        print(f"[积分查询异常] {e}")
         return -1
 
 
@@ -207,8 +214,8 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count, all_
     text = (
         f"### Milwaukee 签到结果\n"
         f"**时间**：{now_str}\n\n"
-        f"✅ 成功：{success_count}/{total_count}\n"
-        f"❌ 失败：{len(failed_accounts)}/{total_count}\n\n"
+        f"✅ 成功：{success_cnt}/{total_cnt}\n"
+        f"❌ 失败：{len(failed_accounts)}/{total_cnt}\n\n"
         f"**失败详情**：\n{fail_details}\n\n"
         f"**完整结果**：\n{filtered_result[:1500]}..."
     )
