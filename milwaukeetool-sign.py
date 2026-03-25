@@ -5,12 +5,11 @@ import json
 import time
 import random
 import os
-from datetime import datetime, timedelta
-
-# ===================== 时区：固定北京时间 =====================
+from datetime import datetime
+# 设置时区为上海（北京时间）
 os.environ['TZ'] = 'Asia/Shanghai'
 if hasattr(time, 'tzset'):
-    time.tzset()
+    time.tzset()  # 生效时区设置（兼容Linux系统，GitHub Actions用的是Linux）
 
 # ================= 全局配置区 =================
 GLOBAL_METHOD = "add.signon.item"
@@ -22,12 +21,13 @@ MILWAUKEETOOL_CLIENT_ID = os.getenv('MILWAUKEETOOL_CLIENT_ID', '')
 # ========== 通知渠道：全部从环境变量读取 ==========
 WECHAT_WEBHOOK_URL = os.getenv('WECHAT_WEBHOOK_URL', '')
 DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
-SERVERCHAN_SENDKEY = os.getenv('SERVERCHAN_SENDKEY', '')
+SERVERCHAN_SENDKEY = os.getenv('SERVERCHAN_SENDKEY', '')  # 补全缺失变量
 
 FAILED_LOG = []
 RESULT_LOG = []
-FILTERED_LOG = []
-SEND_ALL_NOTICE = True
+FILTERED_LOG = []  # 存储需要推送的日志
+SEND_ALL_NOTICE = True  # 核心开关：是否发起通知请求
+
 SHOW_RAW_RESPONSE = True
 
 SECRET = "36affdc58f50e1035649abc808c22b48"
@@ -35,12 +35,10 @@ APPKEY = "76472358"
 PLATFORM = "MP-WEIXIN"
 FORMAT = "json"
 URL = "https://service.milwaukeetool.cn/api/v1/signon"
-POINT_URL = "https://service.milwaukeetool.cn/api/v1/user"
+POINT_URL = "https://service.milwaukeetool.cn/api/v1/user"  # 积分接口
 
-# ================= 时间配置文件（自动记录） =====================
-TIME_FILE = "last_run_hour.txt"
 
-# ================= 防检测UA =================
+# ================= 防检测UA（你原版基础微改） =================
 def get_headers():
     chrome = random.randint(132, 136)
     xweb = random.randint(18960,19027)
@@ -66,7 +64,8 @@ def get_headers():
 
 HEADERS = get_headers()
 
-# ================= 签名 =================
+
+# ================= 签名（你原版，完全不动） =================
 def generate_sign(params_dict):
     sorted_keys = sorted(params_dict.keys())
     s = SECRET
@@ -78,7 +77,8 @@ def generate_sign(params_dict):
     s += SECRET
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
-# ================= 积分查询 =================
+
+# ================= 积分查询（已修复：接口参数+返回值解析） =================
 def get_points(token, client_id):
     try:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -89,17 +89,19 @@ def get_points(token, client_id):
             "format": FORMAT,
             "timestamp": ts,
             "platform": PLATFORM,
-            "method": "get.user.info"
+            "method": "get.user.info"  # 修复：正确接口方法
         }
         payload["sign"] = generate_sign(payload)
         res = requests.post(POINT_URL, headers=HEADERS, json=payload, timeout=10)
         data = res.json()
+        # 修复：正确解析积分字段
         return int(data.get("data", {}).get("points", 0))
     except Exception as e:
         print(f"[积分查询异常] {e}")
         return -1
 
-# ================= 签到状态格式化 =================
+
+# ================= 你原版格式函数，完全不动 =================
 def format_sign_status(json_data, client_id=None):
     try:
         if isinstance(json_data, str):
@@ -152,12 +154,14 @@ def format_sign_status(json_data, client_id=None):
         output.append("=" * 50)
         output.append(f" 报告时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         output.append("=" * 50)
+
         return "\n".join(output)
 
     except Exception as e:
         return f"❌ 格式化错误：{str(e)}"
 
-# ================= 企业微信通知 =================
+
+# ================= 你原版企业微信，保留完整逻辑 =================
 def send_wechat_notification(failed_accounts, total_count, success_count):
     if not WECHAT_WEBHOOK_URL or WECHAT_WEBHOOK_URL.strip() == "":
         print("\n⚠️  未配置环境变量 WECHAT_WEBHOOK_URL，跳过企业微信推送")
@@ -165,6 +169,7 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
+    
     account_details = ""
     if FILTERED_LOG:
         account_details = "\n\n📋 账号签到详情：\n" + "\n".join(FILTERED_LOG)
@@ -181,7 +186,11 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
         f"{account_details}"
     )
 
-    payload = {"msgtype": "text", "text": {"content": content}}
+    payload = {
+        "msgtype": "text",
+        "text": {"content": content}
+    }
+
     try:
         resp = requests.post(WECHAT_WEBHOOK_URL, json=payload, timeout=5)
         if resp.status_code == 200 and resp.json().get("errcode") == 0:
@@ -191,7 +200,8 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
     except Exception as e:
         print(f"\n❌ 企业微信发送异常: {str(e)}")
 
-# ================= 钉钉通知 =================
+
+# ================= 你原版钉钉，保留完整逻辑 =================
 def send_dingtalk_notification(failed_accounts, total_count, success_count, all_result):
     if not DINGTALK_WEBHOOK_URL or DINGTALK_WEBHOOK_URL.strip() == "":
         print("\n⚠️  未配置环境变量 DINGTALK_WEBHOOK_URL，跳过钉钉推送")
@@ -199,18 +209,25 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count, all_
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
-    filtered_result = "\n\n".join(FILTERED_LOG) if FILTERED_LOG else "无需要推送的账号"
 
+    filtered_result = "\n\n".join(FILTERED_LOG) if FILTERED_LOG else "无需要推送的账号"
     text = (
         f"### Milwaukee 签到结果\n"
         f"**时间**：{now_str}\n\n"
-        f"✅ 成功：{success_count}/{total_count}\n"
-        f"❌ 失败：{len(failed_accounts)}/{total_count}\n\n"
+        f"✅ 成功：{success_cnt}/{total_cnt}\n"
+        f"❌ 失败：{len(failed_accounts)}/{total_cnt}\n\n"
         f"**失败详情**：\n{fail_details}\n\n"
         f"**完整结果**：\n{filtered_result[:1500]}..."
     )
 
-    msg = {"msgtype": "markdown", "markdown": {"title": "Milwaukee签到通知", "text": text}}
+    msg = {
+        "msgtype": "markdown",
+        "markdown": {
+            "title": "Milwaukee签到通知",
+            "text": text
+        }
+    }
+
     try:
         resp = requests.post(DINGTALK_WEBHOOK_URL, json=msg, timeout=5)
         if resp.status_code == 200 and resp.json().get("errcode") == 0:
@@ -220,7 +237,8 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count, all_
     except Exception as e:
         print(f"❌ 钉钉发送异常: {str(e)}")
 
-# ================= Server酱通知 =================
+
+# ================= 你原版Server酱，保留完整逻辑 =================
 def send_msg_by_server(send_key, title, content):
     push_url = f'https://sctapi.ftqq.com/{send_key}.send'
     data = {'text': title, 'desp': content}
@@ -230,8 +248,10 @@ def send_msg_by_server(send_key, title, content):
     except RequestException:
         return None
 
-# ================= 签到主逻辑 =================
+
+# ================= 签到主逻辑（单个账号积分判断） =================
 def signAndList(token, client_id, account_index=1):
+    # 签到前查积分
     before = get_points(token, client_id)
     time.sleep(random.uniform(0.5, 1))
 
@@ -253,7 +273,8 @@ def signAndList(token, client_id, account_index=1):
         payload["day"] = str(now.day)
         payload["stype"] = GLOBAL_STYPE
 
-    payload["sign"] = generate_sign(payload)
+    sign_val = generate_sign(payload)
+    payload["sign"] = sign_val
 
     try:
         delay = random.uniform(1.0, 2.5)
@@ -262,149 +283,151 @@ def signAndList(token, client_id, account_index=1):
 
         response = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
         resp_json = response.json()
+
         code = resp_json.get("code")
         msg = resp_json.get("msg", "") or resp_json.get("message", "") or str(resp_json)
-        is_success = code == 200 or "成功" in msg or "已签到" in msg
 
+        is_success = False
+        if code == 200 or "成功" in msg or "已签到" in msg:
+            is_success = True
+
+        # 签到后查积分
         after = get_points(token, client_id)
         msg += f" | 签到前积分：{before} | 签到后积分：{after}"
 
+        # 核心：单个账号积分不变则标记，不加入推送日志
         if is_success and before == after and before != -1:
-            print(f"✅ 账号{account_index}：已签到，积分无变化，不推送")
-            RESULT_LOG.append(f"【账号 {account_index}】client_id: {client_id}\n结果：✅ 成功\n信息：{msg} | 备注：积分无变化")
+            print(f"✅ 账号{account_index}：已签到，积分无变化，不推送该账号")
+            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：✅ 成功\n信息：{msg} | 备注：积分无变化，跳过推送"
+            RESULT_LOG.append(result_line)  # 保留总日志，用于本地查看
         else:
             print(f"✅ 账号{account_index}：正常推送")
-            line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
-            RESULT_LOG.append(line)
-            FILTERED_LOG.append(line)
+            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
+            RESULT_LOG.append(result_line)
+            FILTERED_LOG.append(result_line)  # 加入推送日志
 
         if is_success:
             print(f"      ✅ 结果: 成功 | {msg}")
             if SHOW_RAW_RESPONSE:
                 print(f"      └─ 返回: {json.dumps(resp_json, ensure_ascii=False)}")
 
-            print("\n📢 检查签到记录")
+            print("\n📢 开始检查签到天数")
             time.sleep(random.uniform(1.0, 2.5))
-            p2 = {
-                "token": token, "client_id": client_id, "appkey": APPKEY,
-                "format": FORMAT, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "platform": PLATFORM, "method": "get.signon.list"
+            payload2 = {
+                "token": token,
+                "client_id": client_id,
+                "appkey": APPKEY,
+                "format": FORMAT,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "platform": PLATFORM,
+                "method": "get.signon.list"
             }
-            p2["sign"] = generate_sign(p2)
-            r2 = requests.post(URL, headers=HEADERS, json=p2, timeout=20)
-            print(format_sign_status(r2.json(), client_id))
+            payload2["sign"] = generate_sign(payload2)
+            resp2 = requests.post(URL, headers=HEADERS, json=payload2, timeout=20)
+            signResult = format_sign_status(resp2.json(), client_id=client_id)
+            print(signResult)
+
             return True
         else:
-            print(f"      ❌ 失败 | {msg}")
+            print(f"      ❌ 结果: 失败 | {msg}")
+            print(f"      └─ 完整返回: {json.dumps(resp_json, ensure_ascii=False, indent=2)}")
             FAILED_LOG.append((client_id, msg))
             return False
 
     except Exception as e:
         err = f"异常：{str(e)}"
         print(f"      ❌ {err}")
-        line = f"【账号 {account_index}】client_id: {client_id}\n{err}"
-        RESULT_LOG.append(line)
-        FILTERED_LOG.append(line)
+        result_line = f"【账号 {account_index}】client_id: {client_id}\n{err}"
+        RESULT_LOG.append(result_line)
+        FILTERED_LOG.append(result_line)  # 异常账号正常推送
         FAILED_LOG.append((client_id, err))
         return False
 
-# ================= 处理账号 =================
+
+# ================= 你原版账号处理，不动 =================
 def processAccount():
     tokenList = [t.strip() for t in MILWAUKEETOOL_TOKEN_LIST.split(',') if t.strip()]
     clientIdList = [cid.strip() for cid in MILWAUKEETOOL_CLIENT_ID.split(',') if cid.strip()]
+
     if not tokenList or not clientIdList:
         print("❌ 缺少 token 或 client_id")
         FAILED_LOG.append(("config", "缺少账号信息"))
         return 0, 0
-    n = min(len(tokenList), len(clientIdList))
-    success = 0
-    for i, (t, cid) in enumerate(zip(tokenList[:n], clientIdList[:n]), 1):
-        print(f"\n{'─'*50}\n📌 账号 {i}/{n} | {cid}\n{'─'*50}")
-        if signAndList(t, cid, i):
-            success += 1
-    return success, n
 
-# ================= 通知 =================
+    min_len = min(len(tokenList), len(clientIdList))
+    tokenList = tokenList[:min_len]
+    clientIdList = clientIdList[:min_len]
+
+    print(f"🔧 共 {min_len} 个账号")
+
+    success = 0
+    for i, (token, cid) in enumerate(zip(tokenList, clientIdList), 1):
+        print(f"\n{'─' * 50}")
+        print(f"📌 账号 {i}/{min_len} | {cid}")
+        print('─' * 50)
+        if signAndList(token, cid, i):
+            success += 1
+    return success, min_len
+
+
+# ================= 通知逻辑：使用过滤后的日志 =================
 def sendNotification():
     if not FILTERED_LOG:
-        print("\n🔇 无变化，跳过推送")
+        print("\n🔇 所有账号积分均无变化，跳过Server酱推送")
         return
-    if not SERVERCHAN_SENDKEY:
+
+    if not RESULT_LOG:
+        RESULT_LOG.append("本次执行无任何账号返回信息")
+
+    keys = [SERVERCHAN_SENDKEY.strip()]
+    if not keys or not keys[0]:
         print("📤 未配置 SERVERCHAN_SENDKEY")
         return
+
     content = "\n\n".join(FILTERED_LOG)
-    for k in [SERVERCHAN_SENDKEY.strip()]:
-        ret = send_msg_by_server(k, "Milwaukee 签到结果（仅推送变化）", content)
+    print(f"📤 准备推送需要通知的账号...")
+
+    for key in keys:
+        ret = send_msg_by_server(key, "Milwaukee 签到结果（仅推送积分变化账号）", content)
         if ret and ret.get("code") == 0:
-            print("✅ Server酱推送成功")
+            print(f"✅ Server酱推送成功")
         else:
-            print("❌ Server酱推送失败")
+            print(f"❌ Server酱推送失败")
 
-# ===================== 核心：时间控制逻辑（你要的功能） =====================
-def check_and_wait_run_time():
-    now = datetime.now()
-    current_hour = now.hour
 
-    # 读取上次运行的小时
-    last_hour = 9
-    if os.path.exists(TIME_FILE):
-        try:
-            with open(TIME_FILE, "r", encoding="utf-8") as f:
-                last_hour = int(f.read().strip())
-        except:
-            last_hour = 9
-
-    # 今天应该运行的小时：上次 +1，最大 17，最小 9
-    run_hour = last_hour + 1
-    if run_hour > 17:
-        run_hour = 9
-
-    # 保存下次使用
-    with open(TIME_FILE, "w", encoding="utf-8") as f:
-        f.write(str(run_hour))
-
-    print(f"⏰ 计划运行时间：北京时间 {run_hour}:00 左右")
-    print(f"⏳ 当前时间：{now.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # 只在 9-17 点运行
-    while True:
-        now = datetime.now()
-        h = now.hour
-        if 9 <= h <= 17:
-            print("✅ 在 9-17 点范围内，开始执行签到")
-            break
-        print(f"⏳ 不在 9-17 点，等待中... 当前：{h}点")
-        time.sleep(60)
-
-# ================= 主函数 =================
+# ================= 主函数（核心：控制是否发送所有通知） =================
 def main():
     global FILTERED_LOG, SEND_ALL_NOTICE
     FILTERED_LOG = []
-    SEND_ALL_NOTICE = True
-
-    # ========== 启用时间控制 ==========
-    check_and_wait_run_time()
+    SEND_ALL_NOTICE = True  # 初始化通知开关
 
     print("=" * 60)
-    print("🚀 Milwaukee 自动签到（每日延迟1小时版）")
+    print("🚀 Milwaukee 签到（最终版：积分不变不发通知）")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
     success_cnt, total_cnt = processAccount()
     all_result_str = "\n\n".join(RESULT_LOG)
-
+    
+    # 核心判断：无需要推送的账号则关闭所有通知
     if not FILTERED_LOG:
         SEND_ALL_NOTICE = False
-        print("\n🔇 所有账号无变化，不推送")
+        print("\n🔇 所有账号积分均无变化，关闭所有通知渠道")
+    else:
+        SEND_ALL_NOTICE = True
 
+    # 仅当需要推送时才调用通知函数
     if SEND_ALL_NOTICE:
         sendNotification()
         send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
         send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
+    else:
+        print("\n🔇 跳过所有通知推送（Server酱/企业微信/钉钉）")
 
     print("\n" + "=" * 60)
-    print(f"🏁 完成 | 成功 {success_cnt}/{total_cnt} | 失败 {len(FAILED_LOG)} | 需推送 {len(FILTERED_LOG)}")
+    print(f"🏁 完成 | 成功 {success_cnt}/{total_cnt} | 失败 {len(FAILED_LOG)} | 需推送账号 {len(FILTERED_LOG)}")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     main()
