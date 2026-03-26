@@ -2,8 +2,7 @@ name: JLC Auto Sign
 
 on:
   schedule:
-    - cron: '0 16,22,4,10 * * *'  # 每 6 小时执行一次，UTC 时间
-
+    - cron: '0 16,22,4,10 * * *'  # 每6小时执行 UTC 时间
   workflow_dispatch:
 
 jobs:
@@ -13,7 +12,21 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v3
 
-    - name: Run Sign Script
+    - name: 校验北京时间（禁止 23:00~07:00）
+      run: |
+        # 获取当前北京时间小时
+        BEIJING_HOUR=$(date -u -d '+8 hours' +'%H')
+        echo "当前北京时间：$BEIJING_HOUR 点"
+        
+        # 核心规则：23点 ~ 次日7点 直接终止任务
+        if [ $BEIJING_HOUR -ge 23 ] || [ $BEIJING_HOUR -lt 7 ]; then
+          echo "❌ 当前是 23:00~07:00，禁止签到，任务退出"
+          exit 1
+        else
+          echo "✅ 当前时间合规，允许签到"
+        fi
+
+    - name: 执行签到脚本
       env:
         TOKEN_LIST: ${{ secrets.TOKEN_LIST }}
         DINGTALK_WEBHOOK_URL: ${{ secrets.DINGTALK_WEBHOOK_URL }}
