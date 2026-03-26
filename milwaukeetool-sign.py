@@ -425,7 +425,7 @@ def main():
         print("\n🔇 跳过所有通知推送（Server酱/企业微信/钉钉）")
 
     print("\n" + "=" * 60)
-    print(f"🏁 完成 | 成功 {success_count}/{total_cnt} | 失败 {len(FAILED_LOG)} | 需推送账号 {len(FILTERED_LOG)}")
+    print(f"🏁 完成 | 成功 {success_cnt}/{total_cnt} | 失败 {len(FAILED_LOG)} | 需推送账号 {len(FILTERED_LOG)}")
     print("=" * 60)
 
 
