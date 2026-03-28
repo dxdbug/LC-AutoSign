@@ -78,8 +78,8 @@ def generate_sign(params_dict):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
 
-# ================= 积分查询（已修复：接口参数+返回值解析） =================
-def get_points(token, client_id):
+# ================= 【修复版】查询签到可用次数（真正的签到积分） =================
+def get_available_send_num(token, client_id):
     try:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         payload = {
@@ -89,15 +89,15 @@ def get_points(token, client_id):
             "format": FORMAT,
             "timestamp": ts,
             "platform": PLATFORM,
-            "method": "get.user.info"  # 修复：正确接口方法
+            "method": "get.signon.list"  # 这个接口才返回签到可用次数
         }
         payload["sign"] = generate_sign(payload)
-        res = requests.post(POINT_URL, headers=HEADERS, json=payload, timeout=10)
+        res = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
         data = res.json()
-        # 修复：正确解析积分字段
-        return int(data.get("data", {}).get("points", 0))
+        # 正确字段：available_send_num = 签到可用发送次数（签到会增加这个值）
+        return int(data.get("data", {}).get("available_send_num", 0))
     except Exception as e:
-        print(f"[积分查询异常] {e}")
+        print(f"[可用次数查询异常] {e}")
         return -1
 
 
@@ -215,7 +215,7 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count, all_
         f"### Milwaukee 签到结果\n"
         f"**时间**：{now_str}\n\n"
         f"✅ 成功：{success_cnt}/{total_cnt}\n"
-        f"❌ 失败：{len(failed_accounts)}/{total_cnt}\n\n"
+        f"❌ 失败：{len(failed_account)}/{total_cnt}\n\n"
         f"**失败详情**：\n{fail_details}\n\n"
         f"**完整结果**：\n{filtered_result[:1500]}..."
     )
@@ -249,10 +249,10 @@ def send_msg_by_server(send_key, title, content):
         return None
 
 
-# ================= 签到主逻辑（单个账号积分判断） =================
+# ================= 【修复版】签到主逻辑：对比正确的签到积分 =================
 def signAndList(token, client_id, account_index=1):
-    # 签到前查积分
-    before = get_points(token, client_id)
+    # ✅ 修复：签到前查【可用发送次数】（真正的签到积分）
+    before = get_available_send_num(token, client_id)
     time.sleep(random.uniform(0.5, 1))
 
     now = datetime.now()
@@ -291,20 +291,20 @@ def signAndList(token, client_id, account_index=1):
         if code == 200 or "成功" in msg or "已签到" in msg:
             is_success = True
 
-        # 签到后查积分
-        after = get_points(token, client_id)
-        msg += f" | 签到前积分：{before} | 签到后积分：{after}"
+        # ✅ 修复：签到后查【可用发送次数】
+        after = get_available_send_num(token, client_id)
+        msg += f" | 签到前可用：{before} | 签到后可用：{after}"
 
-        # 核心：单个账号积分不变则标记，不加入推送日志
+        # ✅ 修复：只有真正新增积分才推送
         if is_success and before == after and before != -1:
-            print(f"✅ 账号{account_index}：已签到，积分无变化，不推送该账号")
-            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：✅ 成功\n信息：{msg} | 备注：积分无变化，跳过推送"
-            RESULT_LOG.append(result_line)  # 保留总日志，用于本地查看
+            print(f"✅ 账号{account_index}：已签到，可用次数无变化，不推送")
+            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：✅ 成功\n信息：{msg} | 备注：次数无变化，跳过推送"
+            RESULT_LOG.append(result_line)
         else:
-            print(f"✅ 账号{account_index}：正常推送")
+            print(f"✅ 账号{account_index}：签到成功/异常，正常推送")
             result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
             RESULT_LOG.append(result_line)
-            FILTERED_LOG.append(result_line)  # 加入推送日志
+            FILTERED_LOG.append(result_line)
 
         if is_success:
             print(f"      ✅ 结果: 成功 | {msg}")
@@ -339,7 +339,7 @@ def signAndList(token, client_id, account_index=1):
         print(f"      ❌ {err}")
         result_line = f"【账号 {account_index}】client_id: {client_id}\n{err}"
         RESULT_LOG.append(result_line)
-        FILTERED_LOG.append(result_line)  # 异常账号正常推送
+        FILTERED_LOG.append(result_line)
         FAILED_LOG.append((client_id, err))
         return False
 
@@ -402,21 +402,19 @@ def main():
     SEND_ALL_NOTICE = True  # 初始化通知开关
 
     print("=" * 60)
-    print("🚀 Milwaukee 签到（最终版：积分不变不发通知）")
+    print("🚀 Milwaukee 签到（修复积分查询版）")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
     success_cnt, total_cnt = processAccount()
     all_result_str = "\n\n".join(RESULT_LOG)
     
-    # 核心判断：无需要推送的账号则关闭所有通知
     if not FILTERED_LOG:
         SEND_ALL_NOTICE = False
-        print("\n🔇 所有账号积分均无变化，关闭所有通知渠道")
+        print("\n🔇 所有账号可用次数均无变化，关闭所有通知渠道")
     else:
         SEND_ALL_NOTICE = True
 
-    # 仅当需要推送时才调用通知函数
     if SEND_ALL_NOTICE:
         sendNotification()
         send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
