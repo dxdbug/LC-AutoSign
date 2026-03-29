@@ -78,29 +78,6 @@ def generate_sign(params_dict):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
 
-# ================= 【修复版】查询签到可用次数（真正的签到积分） =================
-def get_available_send_num(token, client_id):
-    try:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        payload = {
-            "token": token,
-            "client_id": client_id,
-            "appkey": APPKEY,
-            "format": FORMAT,
-            "timestamp": ts,
-            "platform": PLATFORM,
-            "method": "get.signon.list"  # 这个接口才返回签到可用次数
-        }
-        payload["sign"] = generate_sign(payload)
-        res = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
-        data = res.json()
-        # 正确字段：available_send_num = 签到可用发送次数（签到会增加这个值）
-        return int(data.get("data", {}).get("available_send_num", 0))
-    except Exception as e:
-        print(f"[可用次数查询异常] {e}")
-        return -1
-
-
 # ================= 你原版格式函数，完全不动 =================
 def format_sign_status(json_data, client_id=None):
     try:
@@ -249,12 +226,8 @@ def send_msg_by_server(send_key, title, content):
         return None
 
 
-# ================= 【修复版】签到主逻辑：对比正确的签到积分 =================
+# ================= 【简化版】签到主逻辑：移除积分对比，只查询总积分 =================
 def signAndList(token, client_id, account_index=1):
-    # ✅ 修复：签到前查【可用发送次数】（真正的签到积分）
-    before = get_available_send_num(token, client_id)
-    time.sleep(random.uniform(0.5, 1))
-
     now = datetime.now()
     timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
     payload = {
@@ -291,20 +264,10 @@ def signAndList(token, client_id, account_index=1):
         if code == 200 or "成功" in msg or "已签到" in msg:
             is_success = True
 
-        # ✅ 修复：签到后查【可用发送次数】
-        after = get_available_send_num(token, client_id)
-        msg += f" | 签到前可用：{before} | 签到后可用：{after}"
-
-        # ✅ 修复：只有真正新增积分才推送
-        if is_success and before == after and before != -1:
-            print(f"✅ 账号{account_index}：已签到，可用次数无变化，不推送")
-            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：✅ 成功\n信息：{msg} | 备注：次数无变化，跳过推送"
-            RESULT_LOG.append(result_line)
-        else:
-            print(f"✅ 账号{account_index}：签到成功/异常，正常推送")
-            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
-            RESULT_LOG.append(result_line)
-            FILTERED_LOG.append(result_line)
+        # 记录结果，全部加入推送日志
+        result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
+        RESULT_LOG.append(result_line)
+        FILTERED_LOG.append(result_line)
 
         if is_success:
             print(f"      ✅ 结果: 成功 | {msg}")
@@ -370,12 +333,8 @@ def processAccount():
     return success, min_len
 
 
-# ================= 通知逻辑：使用过滤后的日志 =================
+# ================= 通知逻辑 =================
 def sendNotification():
-    if not FILTERED_LOG:
-        print("\n🔇 所有账号积分均无变化，跳过Server酱推送")
-        return
-
     if not RESULT_LOG:
         RESULT_LOG.append("本次执行无任何账号返回信息")
 
@@ -385,45 +344,36 @@ def sendNotification():
         return
 
     content = "\n\n".join(FILTERED_LOG)
-    print(f"📤 准备推送需要通知的账号...")
+    print(f"📤 准备推送签到结果...")
 
     for key in keys:
-        ret = send_msg_by_server(key, "Milwaukee 签到结果（仅推送积分变化账号）", content)
+        ret = send_msg_by_server(key, "Milwaukee 签到结果", content)
         if ret and ret.get("code") == 0:
             print(f"✅ Server酱推送成功")
         else:
             print(f"❌ Server酱推送失败")
 
 
-# ================= 主函数（核心：控制是否发送所有通知） =================
+# ================= 主函数 =================
 def main():
-    global FILTERED_LOG, SEND_ALL_NOTICE
+    global FILTERED_LOG
     FILTERED_LOG = []
-    SEND_ALL_NOTICE = True  # 初始化通知开关
 
     print("=" * 60)
-    print("🚀 Milwaukee 签到（修复积分查询版）")
+    print("🚀 Milwaukee 签到")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
     success_cnt, total_cnt = processAccount()
     all_result_str = "\n\n".join(RESULT_LOG)
     
-    if not FILTERED_LOG:
-        SEND_ALL_NOTICE = False
-        print("\n🔇 所有账号可用次数均无变化，关闭所有通知渠道")
-    else:
-        SEND_ALL_NOTICE = True
-
-    if SEND_ALL_NOTICE:
-        sendNotification()
-        send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
-        send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
-    else:
-        print("\n🔇 跳过所有通知推送（Server酱/企业微信/钉钉）")
+    # 全部发送通知
+    sendNotification()
+    send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
+    send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
 
     print("\n" + "=" * 60)
-    print(f"🏁 完成 | 成功 {success_cnt}/{total_cnt} | 失败 {len(FAILED_LOG)} | 需推送账号 {len(FILTERED_LOG)}")
+    print(f"🏁 完成 | 成功 {success_cnt}/{total_cnt} | 失败 {len(FAILED_LOG)}")
     print("=" * 60)
 
 
