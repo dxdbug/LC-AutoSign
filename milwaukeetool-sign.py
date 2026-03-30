@@ -6,10 +6,11 @@ import time
 import random
 import os
 from datetime import datetime
+
 # 设置时区为上海（北京时间）
 os.environ['TZ'] = 'Asia/Shanghai'
 if hasattr(time, 'tzset'):
-    time.tzset()  # 生效时区设置（兼容Linux系统，GitHub Actions用的是Linux）
+    time.tzset()
 
 # ================= 全局配置区 =================
 GLOBAL_METHOD = "add.signon.item"
@@ -26,6 +27,7 @@ SERVERCHAN_SENDKEY = os.getenv('SERVERCHAN_SENDKEY', '')
 FAILED_LOG = []
 RESULT_LOG = []
 FILTERED_LOG = []
+POINT_LOG = []  # 积分日志
 
 SHOW_RAW_RESPONSE = True
 
@@ -35,7 +37,6 @@ PLATFORM = "MP-WEIXIN"
 FORMAT = "json"
 URL = "https://service.milwaukeetool.cn/api/v1/signon"
 POINT_URL = "https://service.milwaukeetool.cn/api/v1/user"
-
 
 # ================= 防检测UA =================
 def get_headers():
@@ -63,7 +64,6 @@ def get_headers():
 
 HEADERS = get_headers()
 
-
 # ================= 签名 =================
 def generate_sign(params_dict):
     sorted_keys = sorted(params_dict.keys())
@@ -76,6 +76,28 @@ def generate_sign(params_dict):
     s += SECRET
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
+# ================= 查询总积分（新增） =================
+def get_user_point(token, client_id):
+    try:
+        payload = {
+            "token": token,
+            "client_id": client_id,
+            "appkey": APPKEY,
+            "format": FORMAT,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "platform": PLATFORM,
+            "method": "get.user.info"
+        }
+        payload["sign"] = generate_sign(payload)
+        time.sleep(0.8)
+        resp = requests.post(POINT_URL, headers=HEADERS, json=payload, timeout=10)
+        data = resp.json()
+        if data.get("status") == 200:
+            total_point = data.get("data", {}).get("available_send_num", 0)
+            return int(total_point)
+        return 0
+    except:
+        return 0
 
 # ================= 签到状态格式化 =================
 def format_sign_status(json_data, client_id=None):
@@ -136,7 +158,6 @@ def format_sign_status(json_data, client_id=None):
     except Exception as e:
         return f"❌ 格式化错误：{str(e)}"
 
-
 # ================= 企业微信通知 =================
 def send_wechat_notification(failed_accounts, total_count, success_count):
     if not WECHAT_WEBHOOK_URL or WECHAT_WEBHOOK_URL.strip() == "":
@@ -146,6 +167,7 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
     account_details = "\n\n📋 账号详情：\n" + "\n".join(FILTERED_LOG) if FILTERED_LOG else ""
+    point_details = "\n\n💰 积分汇总：\n" + "\n".join(POINT_LOG) if POINT_LOG else ""
 
     content = (
         f"🤖 Milwaukee 签到报告\n"
@@ -157,6 +179,7 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
         f"--------------------------\n"
         f"⚠️ 失败详情:\n{fail_details}"
         f"{account_details}"
+        f"{point_details}"
     )
 
     payload = {"msgtype": "text", "text": {"content": content}}
@@ -167,8 +190,7 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
     except:
         print("❌ 企业微信通知失败")
 
-
-# ================= 钉钉通知（已修复变量BUG） =================
+# ================= 钉钉通知 =================
 def send_dingtalk_notification(failed_accounts, total_count, success_count):
     if not DINGTALK_WEBHOOK_URL or DINGTALK_WEBHOOK_URL.strip() == "":
         print("\n⚠️  未配置钉钉机器人，跳过")
@@ -176,7 +198,7 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count):
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
-    filtered_result = "\n\n".join(FILTERED_LOG) if FILTERED_LOG else "无详情"
+    all_detail = "\n\n".join(FILTERED_LOG + POINT_LOG) if (FILTERED_LOG + POINT_LOG) else "无详情"
 
     text = (
         f"### Milwaukee 签到结果\n"
@@ -184,7 +206,7 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count):
         f"✅ 成功：{success_count}/{total_count}\n"
         f"❌ 失败：{len(failed_accounts)}/{total_count}\n\n"
         f"**失败详情**：\n{fail_details}\n\n"
-        f"**详情**：\n{filtered_result[:1500]}"
+        f"**详情**：\n{all_detail[:1800]}"
     )
 
     msg = {
@@ -199,7 +221,6 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count):
     except:
         print("❌ 钉钉通知失败")
 
-
 # ================= Server酱通知 =================
 def send_msg_by_server(send_key, title, content):
     if not send_key:
@@ -213,8 +234,7 @@ def send_msg_by_server(send_key, title, content):
     except:
         print("❌ Server酱推送失败")
 
-
-# ================= 签到主逻辑（无积分对比，只查总积分） =================
+# ================= 签到主逻辑 =================
 def signAndList(token, client_id, account_index=1):
     now = datetime.now()
     timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -244,6 +264,11 @@ def signAndList(token, client_id, account_index=1):
         msg = resp_json.get("msg", "") or resp_json.get("message", "")
         is_success = code == 200 or "成功" in msg or "已签到" in msg
 
+        # 查询积分
+        total_point = get_user_point(token, client_id)
+        point_line = f"【账号 {account_index}】{client_id}\n💰 总积分：{total_point}"
+        POINT_LOG.append(point_line)
+
         # 记录日志
         result_line = f"【账号 {account_index}】{client_id}\n{'✅ 成功' if is_success else '❌ 失败'} | {msg}"
         RESULT_LOG.append(result_line)
@@ -251,7 +276,7 @@ def signAndList(token, client_id, account_index=1):
 
         if is_success:
             print(f"✅ 成功 | {msg}")
-            # 查询签到状态
+            print(f"💰 总积分：{total_point}")
             time.sleep(1)
             payload2 = {
                 "token": token, "client_id": client_id, "appkey": APPKEY,
@@ -274,7 +299,6 @@ def signAndList(token, client_id, account_index=1):
         FAILED_LOG.append((client_id, err))
         return False
 
-
 # ================= 账号处理 =================
 def processAccount():
     tokenList = [t.strip() for t in MILWAUKEETOOL_TOKEN_LIST.split(',') if t.strip()]
@@ -290,23 +314,23 @@ def processAccount():
             success += 1
     return success, min_len
 
-
 # ================= 主函数 =================
 def main():
-    global FAILED_LOG, RESULT_LOG, FILTERED_LOG
+    global FAILED_LOG, RESULT_LOG, FILTERED_LOG, POINT_LOG
     FAILED_LOG = []
     RESULT_LOG = []
     FILTERED_LOG = []
+    POINT_LOG = []
 
     print("=" * 60)
-    print("🚀 Milwaukee 签到脚本（稳定版）")
+    print("🚀 Milwaukee 签到脚本（积分版）")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
     success_cnt, total_cnt = processAccount()
 
     # 发送通知
-    content = "\n\n".join(FILTERED_LOG) if FILTERED_LOG else "无结果"
+    content = "\n\n".join(FILTERED_LOG + POINT_LOG) if (FILTERED_LOG + POINT_LOG) else "无结果"
     send_msg_by_server(SERVERCHAN_SENDKEY, "Milwaukee 签到完成", content)
     send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
     send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt)
@@ -314,7 +338,6 @@ def main():
     print("\n" + "=" * 60)
     print(f"🏁 任务完成 | 成功 {success_cnt}/{total_cnt} | 失败 {len(FAILED_LOG)}")
     print("=" * 60)
-
 
 if __name__ == "__main__":
     main()
