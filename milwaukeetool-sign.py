@@ -76,7 +76,7 @@ def generate_sign(params_dict):
     s += SECRET
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
-# ================= 查询总积分（新增） =================
+# ================= 查询总积分（已修复） =================
 def get_user_point(token, client_id):
     try:
         payload = {
@@ -92,12 +92,20 @@ def get_user_point(token, client_id):
         time.sleep(0.8)
         resp = requests.post(POINT_URL, headers=HEADERS, json=payload, timeout=10)
         data = resp.json()
+        
+        # 打印真实返回（方便调试）
+        print(f"【积分接口返回】: {json.dumps(data, ensure_ascii=False)}")
+        
         if data.get("status") == 200:
-            total_point = data.get("data", {}).get("available_send_num", 0)
-            return int(total_point)
-        return 0
-    except:
-        return 0
+            user_data = data.get("data", {})
+            # 正确字段！
+            total_point = user_data.get("totalPoints", 0)
+            available_point = user_data.get("availablePoints", 0)
+            return total_point, available_point
+        return 0, 0
+    except Exception as e:
+        print(f"积分查询异常：{e}")
+        return 0, 0
 
 # ================= 签到状态格式化 =================
 def format_sign_status(json_data, client_id=None):
@@ -264,9 +272,9 @@ def signAndList(token, client_id, account_index=1):
         msg = resp_json.get("msg", "") or resp_json.get("message", "")
         is_success = code == 200 or "成功" in msg or "已签到" in msg
 
-        # 查询积分
-        total_point = get_user_point(token, client_id)
-        point_line = f"【账号 {account_index}】{client_id}\n💰 总积分：{total_point}"
+        # 查询积分（已修复）
+        total_point, available_point = get_user_point(token, client_id)
+        point_line = f"【账号 {account_index}】{client_id}\n💰 总积分：{total_point} | 可用积分：{available_point}"
         POINT_LOG.append(point_line)
 
         # 记录日志
@@ -276,7 +284,7 @@ def signAndList(token, client_id, account_index=1):
 
         if is_success:
             print(f"✅ 成功 | {msg}")
-            print(f"💰 总积分：{total_point}")
+            print(f"💰 总积分：{total_point} | 可用积分：{available_point}")
             time.sleep(1)
             payload2 = {
                 "token": token, "client_id": client_id, "appkey": APPKEY,
@@ -323,7 +331,7 @@ def main():
     POINT_LOG = []
 
     print("=" * 60)
-    print("🚀 Milwaukee 签到脚本（积分版）")
+    print("🚀 Milwaukee 签到脚本（积分修复版）")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
