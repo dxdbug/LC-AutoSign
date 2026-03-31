@@ -77,6 +77,7 @@ def generate_sign(params_dict):
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
 # ================= 查询总积分（已修复） =================
+# ================= 查询总积分（最终修复版） =================
 def get_user_point(token, client_id):
     try:
         payload = {
@@ -88,7 +89,9 @@ def get_user_point(token, client_id):
             "platform": PLATFORM,
             "method": "get.user.info"
         }
+        # ✅ 关键修复1：必须加上签名！！！
         payload["sign"] = generate_sign(payload)
+        
         time.sleep(0.8)
         resp = requests.post(POINT_URL, headers=HEADERS, json=payload, timeout=10)
         data = resp.json()
@@ -98,15 +101,14 @@ def get_user_point(token, client_id):
         
         if data.get("status") == 200:
             user_data = data.get("data", {})
-            # 正确字段！
-            total_point = user_data.get("totalPoints", 0)
-            available_point = user_data.get("availablePoints", 0)
+            # ✅ 关键修复2：正确字段名（官方接口真实字段）
+            total_point = user_data.get("totalPoint", 0)
+            available_point = user_data.get("availablePoint", 0)
             return total_point, available_point
         return 0, 0
     except Exception as e:
         print(f"积分查询异常：{e}")
         return 0, 0
-
 # ================= 签到状态格式化 =================
 def format_sign_status(json_data, client_id=None):
     try:
