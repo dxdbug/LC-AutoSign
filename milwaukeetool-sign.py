@@ -76,9 +76,10 @@ def generate_sign(params_dict):
     s += SECRET
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
-# ================= 查询总积分（最终正确版） =================
+# ================= 查询总积分（最终完美版） =================
 def get_user_point(token, client_id):
     try:
+        # 关键：积分必须走签到的同一个接口地址！
         payload = {
             "token": token,
             "client_id": client_id,
@@ -86,19 +87,19 @@ def get_user_point(token, client_id):
             "format": FORMAT,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "platform": PLATFORM,
-            "method": "get.user.point"  # <--- 关键！换成这个
+            "method": "get.user.point"  # 正确查积分方法
         }
         payload["sign"] = generate_sign(payload)
         
         time.sleep(0.8)
-        resp = requests.post(POINT_URL, headers=HEADERS, json=payload, timeout=10)
+        # 重点：必须用 URL，不是 POINT_URL！！！
+        resp = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
         data = resp.json()
         
         print(f"【积分接口返回】: {json.dumps(data, ensure_ascii=False)}")
         
         if data.get("status") == 200:
             point_data = data.get("data", {})
-            # 真实字段：
             total_point = point_data.get("total_point", 0)
             available_point = point_data.get("available_point", 0)
             return total_point, available_point
