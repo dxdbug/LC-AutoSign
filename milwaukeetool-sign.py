@@ -76,22 +76,35 @@ def generate_sign(params_dict):
     s += SECRET
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
-# ================= 积分查询（只加这个，极简） =================
-def get_points(token, client_id):
+# ================= 查询总积分（终极修复版 · 无403） =================
+def get_user_point(token, client_id):
     try:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         payload = {
-            "token": token, "client_id": client_id, "appkey": APPKEY,
-            "format": FORMAT, "timestamp": ts, "platform": PLATFORM,
-            "method": "get.user.item"
+            "token": token,
+            "client_id": client_id,
+            "appkey": APPKEY,
+            "format": FORMAT,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "platform": PLATFORM,
+            "method": "get.signon.list"
         }
         payload["sign"] = generate_sign(payload)
-        res = requests.post(POINT_URL, headers=HEADERS, json=payload, timeout=10)
-        data = res.json()
-        return int(data.get("data", {}).get("get_user_money", {}).get("points", 0))
-    except:
-        return -1
         
+        time.sleep(0.8)
+        resp = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
+        data = resp.json()
+
+        if data.get("status") == 200:
+            sign_data = data.get("data", {})
+            available_point = sign_data.get("available_send_num", 0)
+            total_point = sign_data.get("total_send_num", 0)
+            return total_point, available_point
+        
+        return 0, 0
+    except Exception as e:
+        print(f"积分查询异常：{e}")
+        return 0, 0
+
 # ================= 签到状态格式化 =================
 def format_sign_status(json_data, client_id=None):
     try:
@@ -257,7 +270,7 @@ def signAndList(token, client_id, account_index=1):
         msg = resp_json.get("msg", "") or resp_json.get("message", "")
         is_success = code == 200 or "成功" in msg or "已签到" in msg
 
-        # 查询积分（已修复）
+        # 查询积分
         total_point, available_point = get_user_point(token, client_id)
         point_line = f"【账号 {account_index}】{client_id}\n💰 总积分：{total_point} | 可用积分：{available_point}"
         POINT_LOG.append(point_line)
