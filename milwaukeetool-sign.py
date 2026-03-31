@@ -76,8 +76,7 @@ def generate_sign(params_dict):
     s += SECRET
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
-# ================= 查询总积分（已修复） =================
-# ================= 查询总积分（最终修复版） =================
+# ================= 查询总积分（最终正确版） =================
 def get_user_point(token, client_id):
     try:
         payload = {
@@ -87,23 +86,21 @@ def get_user_point(token, client_id):
             "format": FORMAT,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "platform": PLATFORM,
-            "method": "get.user.info"
+            "method": "get.user.point"  # <--- 关键！换成这个
         }
-        # ✅ 关键修复1：必须加上签名！！！
         payload["sign"] = generate_sign(payload)
         
         time.sleep(0.8)
         resp = requests.post(POINT_URL, headers=HEADERS, json=payload, timeout=10)
         data = resp.json()
         
-        # 打印真实返回（方便调试）
         print(f"【积分接口返回】: {json.dumps(data, ensure_ascii=False)}")
         
         if data.get("status") == 200:
-            user_data = data.get("data", {})
-            # ✅ 关键修复2：正确字段名（官方接口真实字段）
-            total_point = user_data.get("totalPoint", 0)
-            available_point = user_data.get("availablePoint", 0)
+            point_data = data.get("data", {})
+            # 真实字段：
+            total_point = point_data.get("total_point", 0)
+            available_point = point_data.get("available_point", 0)
             return total_point, available_point
         return 0, 0
     except Exception as e:
