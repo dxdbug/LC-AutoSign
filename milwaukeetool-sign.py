@@ -76,10 +76,11 @@ def generate_sign(params_dict):
     s += SECRET
     return hashlib.md5(s.encode('utf-8')).hexdigest()
 
-# ================= 查询总积分（最终完美版） =================
+# ================= 查询总积分（终极可用版 · 从签到列表读取） =================
+# 此版本不再请求独立积分接口，彻底解决 403 权限不足！
 def get_user_point(token, client_id):
     try:
-        # 关键：积分必须走签到的同一个接口地址！
+        # 直接调用【签到列表接口】（你本来就有权限）
         payload = {
             "token": token,
             "client_id": client_id,
@@ -87,22 +88,22 @@ def get_user_point(token, client_id):
             "format": FORMAT,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "platform": PLATFORM,
-            "method": "get.user.point"  # 正确查积分方法
+            "method": "get.signon.list"
         }
         payload["sign"] = generate_sign(payload)
         
         time.sleep(0.8)
-        # 重点：必须用 URL，不是 POINT_URL！！！
+        # 用签到地址，绝对有权限
         resp = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
         data = resp.json()
-        
-        print(f"【积分接口返回】: {json.dumps(data, ensure_ascii=False)}")
-        
+
         if data.get("status") == 200:
-            point_data = data.get("data", {})
-            total_point = point_data.get("total_point", 0)
-            available_point = point_data.get("available_point", 0)
+            sign_data = data.get("data", {})
+            # ✅ 这个接口里自带积分字段！！！
+            available_point = sign_data.get("available_send_num", 0)  # 可用积分
+            total_point = sign_data.get("total_send_num", 0)         # 总积分
             return total_point, available_point
+        
         return 0, 0
     except Exception as e:
         print(f"积分查询异常：{e}")
