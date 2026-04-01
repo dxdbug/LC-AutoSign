@@ -278,27 +278,43 @@ def signAndList(token, client_id, account_index=1):
         response = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
         resp_json = response.json()
 
-        # ========== 已修复：正确判断成功失败 ==========
+        # ========== 正确判断成功失败 ==========
         status = resp_json.get("status")
         msg = resp_json.get("message", "")
         is_success = (status == 200) or (msg == "success")
-        # ===========================================
+        # ====================================
 
         # 签到后查积分
         after = get_points(token, client_id)
         msg += f" | 签到前积分：{before} | 签到后积分：{after}"
 
-        # 核心：单个账号积分不变则标记，不加入推送日志
-        if is_success and before == after and before != -1:
-            print(f"✅ 账号{account_index}：已签到，积分无变化，不推送该账号")
-            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：✅ 成功\n信息：{msg} | 备注：积分无变化，跳过推送"
-            RESULT_LOG.append(result_line)  # 保留总日志，用于本地查看
-        else:
-            print(f"✅ 账号{account_index}：正常推送")
-            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
-            RESULT_LOG.append(result_line)
-            FILTERED_LOG.append(result_line)  # 加入推送日志
+        # ======================
+        # 推送规则：
+        # 1. 成功 + 积分增加 → 推
+        # 2. 成功 + 积分不变 → 不推
+        # 3. 失败 → 推
+        # ======================
+        point_increased = (after > before) and (before != -1) and (after != -1)
+        need_push = False
 
+        if is_success:
+            if point_increased:
+                need_push = True
+                print(f"✅ 账号{account_index}：积分增加，正常推送")
+            else:
+                need_push = False
+                print(f"✅ 账号{account_index}：已签到，积分无变化，不推送")
+        else:
+            need_push = True
+            print(f"❌ 账号{account_index}：签到失败，加入推送")
+
+        # 统一组装日志
+        result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
+        RESULT_LOG.append(result_line)
+        if need_push:
+            FILTERED_LOG.append(result_line)
+
+        # 后续逻辑
         if is_success:
             print(f"      ✅ 结果: 成功 | {msg}")
             if SHOW_RAW_RESPONSE:
@@ -319,7 +335,6 @@ def signAndList(token, client_id, account_index=1):
             resp2 = requests.post(URL, headers=HEADERS, json=payload2, timeout=20)
             signResult = format_sign_status(resp2.json(), client_id=client_id)
             print(signResult)
-
             return True
         else:
             print(f"      ❌ 结果: 失败 | {msg}")
@@ -328,11 +343,12 @@ def signAndList(token, client_id, account_index=1):
             return False
 
     except Exception as e:
+        # 异常 → 推送
         err = f"异常：{str(e)}"
-        print(f"      ❌ {err}")
-        result_line = f"【账号 {account_index}】client_id: {client_id}\n{err}"
+        print(f"      ❌ 账号{account_index}：{err}（加入推送）")
+        result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：❌ 异常\n信息：{err}"
         RESULT_LOG.append(result_line)
-        FILTERED_LOG.append(result_line)  # 异常账号正常推送
+        FILTERED_LOG.append(result_line)
         FAILED_LOG.append((client_id, err))
         return False
 
