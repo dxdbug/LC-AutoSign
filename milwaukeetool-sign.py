@@ -289,32 +289,47 @@ def signAndList(token, client_id, account_index=1):
         msg += f" | 签到前积分：{before} | 签到后积分：{after}"
 
         # ======================
-        # 推送规则：
-        # 1. 成功 + 积分增加 → 推
-        # 2. 成功 + 积分不变 → 不推
-        # 3. 失败 → 推
+        # 核心规则：
+        # 1. 成功+积分增加 → 推送
+        # 2. 成功+积分不变 → 已签到，不推送，不算失败
+        # 3. 接口返回失败 → 推送，算失败
         # ======================
         point_increased = (after > before) and (before != -1) and (after != -1)
+        already_signed = is_success and (before == after) and (before != -1)
         need_push = False
+        real_failed = False
 
-        if is_success:
-            if point_increased:
-                need_push = True
-                print(f"✅ 账号{account_index}：积分增加，正常推送")
-            else:
-                need_push = False
-                print(f"✅ 账号{account_index}：已签到，积分无变化，不推送")
-        else:
+        if already_signed:
+            # 已签到 → 不算失败，不推送
+            need_push = False
+            real_failed = False
+            print(f"✅ 账号{account_index}：今日已签到，积分无变化，不推送")
+        elif is_success and point_increased:
+            # 签到成功 + 积分增加 → 推送
             need_push = True
-            print(f"❌ 账号{account_index}：签到失败，加入推送")
+            real_failed = False
+            print(f"✅ 账号{account_index}：签到成功，积分增加")
+        else:
+            # 真正失败 → 推送
+            need_push = True
+            real_failed = True
+            print(f"❌ 账号{account_index}：签到失败")
 
-        # 统一组装日志
-        result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
+        # 组装日志
+        if already_signed:
+            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：✅ 已签到\n信息：{msg} | 备注：无需重复签到"
+        else:
+            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
+        
         RESULT_LOG.append(result_line)
         if need_push:
             FILTERED_LOG.append(result_line)
 
-        # 后续逻辑
+        # 只有真正失败才加入失败日志
+        if real_failed:
+            FAILED_LOG.append((client_id, msg))
+
+        # 成功逻辑
         if is_success:
             print(f"      ✅ 结果: 成功 | {msg}")
             if SHOW_RAW_RESPONSE:
@@ -336,22 +351,18 @@ def signAndList(token, client_id, account_index=1):
             signResult = format_sign_status(resp2.json(), client_id=client_id)
             print(signResult)
             return True
-        else:
-            print(f"      ❌ 结果: 失败 | {msg}")
-            print(f"      └─ 完整返回: {json.dumps(resp_json, ensure_ascii=False, indent=2)}")
-            FAILED_LOG.append((client_id, msg))
-            return False
+        return False
 
     except Exception as e:
-        # 异常 → 推送
+        # 异常 → 推送，算失败
         err = f"异常：{str(e)}"
-        print(f"      ❌ 账号{account_index}：{err}（加入推送）")
+        print(f"      ❌ 账号{account_index}：{err}")
         result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：❌ 异常\n信息：{err}"
         RESULT_LOG.append(result_line)
         FILTERED_LOG.append(result_line)
         FAILED_LOG.append((client_id, err))
         return False
-
+        
 # ================= 你原版账号处理，不动 =================
 def processAccount():
     tokenList = [t.strip() for t in MILWAUKEETOOL_TOKEN_LIST.split(',') if t.strip()]
