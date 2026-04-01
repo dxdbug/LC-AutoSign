@@ -268,7 +268,7 @@ def signAndList(token, client_id, account_index=1):
         payload["stype"] = GLOBAL_STYPE
 
     sign_val = generate_sign(payload)
-    payload["sign"] = generate_sign(payload)
+    payload["sign"] = sign_val
 
     try:
         delay = random.uniform(1.0, 2.5)
@@ -278,30 +278,27 @@ def signAndList(token, client_id, account_index=1):
         response = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
         resp_json = response.json()
 
-        # ========== 正确判断成功失败 ==========
+        # ========== ✅ 终极修复：已签到 = 成功，不算失败 ==========
         status = resp_json.get("status")
         msg = resp_json.get("message", "")
-        is_success = (status == 200) or (msg == "success")
-        # ====================================
+        
+        # 核心规则：只要 message 包含“已签到”，一律视为成功
+        is_success = (status == 200) or ("已签到" in msg)
+        # ======================================================
 
         # 签到后查积分
         after = get_points(token, client_id)
         msg += f" | 签到前积分：{before} | 签到后积分：{after}"
 
-        # ======================
-        # 最终规则：
-        # 1. 已签到（成功+积分不变）→ 不算失败，不推送
-        # 2. 签到成功+积分增加 → 推送
-        # 3. 真正失败 → 推送
-        # ======================
+        # 积分判断
         point_increased = (after > before) and (before != -1)
-        already_signed = is_success and (before == after) and (before != -1)
-        real_failed = not is_success  # 只有接口返回失败才算失败
+        already_signed = "已签到" in msg  # 直接判断文案
+        real_failed = not is_success
 
-        # 推送逻辑
+        # 推送规则（你要的最终版）
         need_push = False
         if already_signed:
-            print(f"✅ 账号{account_index}：今日已签到，积分无变化 → 不推送")
+            print(f"✅ 账号{account_index}：今日已签到 → 不推送")
         elif is_success and point_increased:
             print(f"✅ 账号{account_index}：签到成功，积分增加 → 推送")
             need_push = True
@@ -309,7 +306,7 @@ def signAndList(token, client_id, account_index=1):
             print(f"❌ 账号{account_index}：签到失败 → 推送")
             need_push = True
 
-        # 组装日志（关键：已签到 显示 ✅ 已签到，绝对不是失败）
+        # 日志展示（已签到 = ✅ 绝不是 ❌）
         if already_signed:
             result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：✅ 已签到\n信息：{msg}"
         else:
@@ -320,11 +317,13 @@ def signAndList(token, client_id, account_index=1):
             FILTERED_LOG.append(result_line)
 
         # 只有真正失败才加入失败列表
-        if real_failed:
+        if real_failed and not already_signed:
             FAILED_LOG.append((client_id, msg))
 
-        # 输出结果
-        if is_success:
+        # 控制台输出
+        if already_signed:
+            print(f"      ✅ 结果: 成功 | {msg}")
+        elif is_success:
             print(f"      ✅ 结果: 成功 | {msg}")
         else:
             print(f"      ❌ 结果: 失败 | {msg}")
@@ -332,7 +331,7 @@ def signAndList(token, client_id, account_index=1):
         if SHOW_RAW_RESPONSE:
             print(f"      └─ 返回: {json.dumps(resp_json, ensure_ascii=False)}")
 
-        # 成功后查询签到状态
+        # 成功/已签到 都执行查询
         if is_success:
             print("\n📢 开始检查签到天数")
             time.sleep(random.uniform(1.0, 2.5))
