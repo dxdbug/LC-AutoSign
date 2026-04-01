@@ -271,18 +271,18 @@ def signAndList(token, client_id, account_index=1):
     payload["sign"] = sign_val
 
     try:
-    delay = random.uniform(1.0, 2.5)
-    print(f"      ⏳ 等待 {delay:.1f}s...")
-    time.sleep(delay)
+        delay = random.uniform(1.0, 2.5)
+        print(f"      ⏳ 等待 {delay:.1f}s...")
+        time.sleep(delay)
 
-    response = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
-    resp_json = response.json()
+        response = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
+        resp_json = response.json()
 
-    # ========== 修复开始 ==========
-    status = resp_json.get("status")
-    msg = resp_json.get("message", "")
-    is_success = (status == 200) or (msg == "success")
-    # ========== 修复结束 ==========
+        # ========== 已修复：正确判断成功失败 ==========
+        status = resp_json.get("status")
+        msg = resp_json.get("message", "")
+        is_success = (status == 200) or (msg == "success")
+        # ===========================================
 
         # 签到后查积分
         after = get_points(token, client_id)
@@ -335,7 +335,6 @@ def signAndList(token, client_id, account_index=1):
         FILTERED_LOG.append(result_line)  # 异常账号正常推送
         FAILED_LOG.append((client_id, err))
         return False
-
 
 # ================= 你原版账号处理，不动 =================
 def processAccount():
