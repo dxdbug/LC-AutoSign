@@ -271,19 +271,18 @@ def signAndList(token, client_id, account_index=1):
     payload["sign"] = sign_val
 
     try:
-        delay = random.uniform(1.0, 2.5)
-        print(f"      ⏳ 等待 {delay:.1f}s...")
-        time.sleep(delay)
+    delay = random.uniform(1.0, 2.5)
+    print(f"      ⏳ 等待 {delay:.1f}s...")
+    time.sleep(delay)
 
-        response = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
-        resp_json = response.json()
+    response = requests.post(URL, headers=HEADERS, json=payload, timeout=10)
+    resp_json = response.json()
 
-        code = resp_json.get("code")
-        msg = resp_json.get("msg", "") or resp_json.get("message", "") or str(resp_json)
-
-        is_success = False
-        if code == 200 or "成功" in msg or "已签到" in msg:
-            is_success = True
+    # ========== 修复开始 ==========
+    status = resp_json.get("status")
+    msg = resp_json.get("message", "")
+    is_success = (status == 200) or (msg == "success")
+    # ========== 修复结束 ==========
 
         # 签到后查积分
         after = get_points(token, client_id)
