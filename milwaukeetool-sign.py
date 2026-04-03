@@ -288,7 +288,11 @@ def signAndList(token, client_id, account_index=1):
 
         # 签到后查积分
         after = get_points(token, client_id)
-        msg += f" | 签到前积分：{before} | 签到后积分：{after}"
+        # ============== 新增：计算本次签到获得积分 ==============
+        reward_points = after - before  # 本次获得积分
+        # ======================================================
+        # 优化日志展示，增加本次获得积分项
+        msg += f" | 获得：{reward_points} | 总分：{after}"
 
         # 积分判断
         point_increased = (after > before) and (before != -1)
