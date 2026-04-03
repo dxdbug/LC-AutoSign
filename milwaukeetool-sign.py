@@ -141,9 +141,9 @@ def format_sign_status(json_data, client_id=None):
 
         output.append("")
         output.append("【使用统计】")
-        output.append(f"  📤 今日发送：{send_num}")
+        output.append(f"  📤 今日获得：{reward_points}")
         output.append(f"  📥 今日使用：{used_num}")
-        output.append(f"  💾 可用额度：{available_num}")
+        output.append(f"  💾 可用积分：{after}")
         output.append("")
         output.append("=" * 50)
         output.append(f" 报告时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -312,7 +312,7 @@ def signAndList(token, client_id, account_index=1):
 
         # 日志展示（已签到 = ✅ 绝不是 ❌）
         if already_signed:
-            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：✅ 已签到\n信息：{msg}"
+            result_line = f"【账号 {account_index}】 {client_id}\n✅ 已签到\n{msg}"
         else:
             result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
 
