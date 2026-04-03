@@ -111,7 +111,7 @@ def format_sign_status(json_data, client_id=None):
         sign_status = sign_data.get('SigninStatus', 0)
         sign_count = sign_data.get('signcount', 0)
         items = sign_data.get('items', [])
-        send_num = sign_data.get('send_num', 0)
+        send_num = sign_data.get('reward_points', 0)
         used_num = sign_data.get('used_num', 0)
         available_num = sign_data.get('available_send_num', 0)
 
@@ -141,9 +141,9 @@ def format_sign_status(json_data, client_id=None):
 
         output.append("")
         output.append("【使用统计】")
-        output.append(f"  📤 今日获得：{reward_points}")
+        output.append(f"  📤 今日获得：{send_num}")
         output.append(f"  📥 今日使用：{used_num}")
-        output.append(f"  💾 可用积分：{after}")
+        output.append(f"  💾 可用积分：{available_num}")
         output.append("")
         output.append("=" * 50)
         output.append(f" 报告时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
