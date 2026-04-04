@@ -314,7 +314,7 @@ def signAndList(token, client_id, account_index=1):
         if already_signed:
             result_line = f"【账号 {account_index}】 {client_id}\n✅ 已签到\n{msg}"
         else:
-            result_line = f"【账号 {account_index}】client_id: {client_id}\n结果：{'✅ 成功' if is_success else '❌ 失败'}\n信息：{msg}"
+            result_line = f"【账号 {account_index}】 {client_id}\n{'✅ 成功' if is_success else '❌ 失败'}\n{msg}"
 
         RESULT_LOG.append(result_line)
         if need_push:
