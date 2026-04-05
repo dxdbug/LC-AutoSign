@@ -439,7 +439,7 @@ def main():
     # 仅当需要推送时才调用通知函数
     if SEND_ALL_NOTICE:
         sendNotification()
-        send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
+        send_wechat_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
         send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
     else:
         print("\n🔇 跳过所有通知推送（Server酱/企业微信/钉钉）")
