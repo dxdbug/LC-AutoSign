@@ -17,7 +17,6 @@ GLOBAL_STYPE = 1
 
 MILWAUKEETOOL_TOKEN_LIST = os.getenv('MILWAUKEETOOL_TOKEN_LIST', '')
 MILWAUKEETOOL_CLIENT_ID = os.getenv('MILWAUKEETOOL_CLIENT_ID', '')
-SERVERCHAN_SENDKEY = os.getenv('SERVERCHAN_SENDKEY', '')
 
 # ========== 通知渠道：全部从环境变量读取 ==========
 WECHAT_WEBHOOK_URL = os.getenv('WECHAT_WEBHOOK_URL', '')
@@ -232,17 +231,6 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count, all_
         print(f"❌ 钉钉发送异常: {str(e)}")
 
 
-# ================= 你原版Server酱，保留完整逻辑 =================
-def send_msg_by_server(send_key, title, content):
-    push_url = f'https://sctapi.ftqq.com/{send_key}.send'
-    data = {'text': title, 'desp': content}
-    try:
-        response = requests.post(push_url, data=data, timeout=10)
-        return response.json()
-    except RequestException:
-        return None
-
-
 # ================= 签到主逻辑（单个账号积分判断） =================
 def signAndList(token, client_id, account_index=1):
     # 签到前查积分
@@ -442,7 +430,7 @@ def main():
         send_wechat_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
         send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
     else:
-        print("\n🔇 跳过所有通知推送（Server酱/企业微信/钉钉）")
+        print("\n🔇 跳过所有通知推送（企业微信/钉钉）")
 
     print("\n" + "=" * 60)
     print(f"🏁 完成 | 成功 {success_cnt}/{total_cnt} | 失败 {len(FAILED_LOG)} | 需推送账号 {len(FILTERED_LOG)}")
