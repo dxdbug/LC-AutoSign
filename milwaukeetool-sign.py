@@ -195,7 +195,7 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
 
 
 # ================= 你原版钉钉，保留完整逻辑 =================
-def send_dingtalk_notification(failed_accounts, total_count, success_count, all_result):
+def send_dingtalk_notification(failed_accounts, total_count, success_count):
     if not DINGTALK_WEBHOOK_URL or DINGTALK_WEBHOOK_URL.strip() == "":
         print("\n⚠️  未配置环境变量 DINGTALK_WEBHOOK_URL，跳过钉钉推送")
         return
@@ -378,31 +378,6 @@ def processAccount():
     return success, min_len
 
 
-# ================= 通知逻辑：使用过滤后的日志 =================
-def sendNotification():
-    if not FILTERED_LOG:
-        print("\n🔇 所有账号积分均无变化，跳过Server酱推送")
-        return
-
-    if not RESULT_LOG:
-        RESULT_LOG.append("本次执行无任何账号返回信息")
-
-    keys = [SERVERCHAN_SENDKEY.strip()]
-    if not keys or not keys[0]:
-        print("📤 未配置 SERVERCHAN_SENDKEY")
-        return
-
-    content = "\n\n".join(FILTERED_LOG)
-    print(f"📤 准备推送需要通知的账号...")
-
-    for key in keys:
-        ret = send_msg_by_server(key, "Milwaukee 签到结果（仅推送积分变化账号）", content)
-        if ret and ret.get("code") == 0:
-            print(f"✅ Server酱推送成功")
-        else:
-            print(f"❌ Server酱推送失败")
-
-
 # ================= 主函数（核心：控制是否发送所有通知） =================
 def main():
     global FILTERED_LOG, SEND_ALL_NOTICE
@@ -426,9 +401,8 @@ def main():
 
     # 仅当需要推送时才调用通知函数
     if SEND_ALL_NOTICE:
-        sendNotification()
-        send_wechat_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
-        send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt, all_result_str)
+        send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
+        send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt)
     else:
         print("\n🔇 跳过所有通知推送（企业微信/钉钉）")
 
