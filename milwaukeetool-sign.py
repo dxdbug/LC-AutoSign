@@ -154,7 +154,7 @@ def format_sign_status(json_data, client_id=None):
         return f"❌ 格式化错误：{str(e)}"
 
 
-# ================= 你原版企业微信，保留完整逻辑 =================
+# ================= 修复版：企业微信通知（可正常接收） =================
 def send_wechat_notification(failed_accounts, total_count, success_count):
     if not WECHAT_WEBHOOK_URL or WECHAT_WEBHOOK_URL.strip() == "":
         print("\n⚠️  未配置环境变量 WECHAT_WEBHOOK_URL，跳过企业微信推送")
@@ -163,10 +163,12 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
     
+    # 企业微信严格限制长度 + 换行，必须限制长度
     account_details = ""
     if FILTERED_LOG:
-        account_details = "\n\n📋 账号签到详情：\n" + "\n".join(FILTERED_LOG)
+        account_details = "\n\n📋 账号签到详情：\n" + "\n".join(FILTERED_LOG[:15])  # 只取前15条防止超长
 
+    # 关键：企业微信 text 消息不能有太多连续换行 + 必须控制总长度
     content = (
         f"🤖 Milwaukee 签到任务执行报告\n"
         f"📅 时间: {now_str}\n"
@@ -176,8 +178,14 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
         f"📦 总数: {total_count} 个\n"
         f"--------------------------\n"
         f"⚠️ 失败详情:\n{fail_details}"
-        f"{account_details}"
     )
+
+    # 长度裁剪（企业微信上限约 2000 字符）
+    if len(content) > 1800:
+        content = content[:1800] + "...\n(内容已截断，详情查看日志)"
+
+    # 追加详情（安全拼接）
+    content += account_details[:300]  # 详情只保留300字符
 
     payload = {
         "msgtype": "text",
@@ -185,8 +193,9 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
     }
 
     try:
-        resp = requests.post(WECHAT_WEBHOOK_URL, json=payload, timeout=5)
-        if resp.status_code == 200 and resp.json().get("errcode") == 0:
+        resp = requests.post(WECHAT_WEBHOOK_URL, json=payload, timeout=8)
+        result = resp.json()
+        if resp.status_code == 200 and result.get("errcode") == 0:
             print("\n✅ 企业微信通知发送成功")
         else:
             print(f"\n❌ 企业微信通知失败: {resp.text}")
