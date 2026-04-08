@@ -160,48 +160,44 @@ def send_wechat_notification(failed_accounts, total_count, success_count):
         print("\n⚠️  未配置环境变量 WECHAT_WEBHOOK_URL，跳过企业微信推送")
         return
 
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
     fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
-    
-    # 企业微信严格限制长度 + 换行，必须限制长度
+
+    # 账号详情（严格控制长度，避免超长）
     account_details = ""
     if FILTERED_LOG:
-        account_details = "\n\n📋 账号签到详情：\n" + "\n".join(FILTERED_LOG[:15])  # 只取前15条防止超长
+        account_details = "\n\n账号详情：\n" + "\n".join(FILTERED_LOG[:8])
 
-    # 关键：企业微信 text 消息不能有太多连续换行 + 必须控制总长度
+    # 企业微信纯文本格式（最简单、最稳定）
     content = (
-        f"🤖 Milwaukee 签到任务执行报告\n"
-        f"📅 时间: {now_str}\n"
-        f"--------------------------\n"
-        f"✅ 成功: {success_count} 个\n"
-        f"❌ 失败: {len(failed_accounts)} 个\n"
-        f"📦 总数: {total_count} 个\n"
-        f"--------------------------\n"
-        f"⚠️ 失败详情:\n{fail_details}"
+        f"Milwaukee 签到报告\n"
+        f"时间：{now_str}\n"
+        f"成功：{success_count}/{total_count}\n"
+        f"失败：{len(failed_accounts)}/{total_count}\n\n"
+        f"失败详情：\n{fail_details}"
+        f"{account_details}"
     )
 
-    # 长度裁剪（企业微信上限约 2000 字符）
-    if len(content) > 1800:
-        content = content[:1800] + "...\n(内容已截断，详情查看日志)"
-
-    # 追加详情（安全拼接）
-    content += account_details[:300]  # 详情只保留300字符
+    # 严格截断长度
+    content = content[:1800]
 
     payload = {
         "msgtype": "text",
-        "text": {"content": content}
+        "text": {
+            "content": content
+        }
     }
 
     try:
-        resp = requests.post(WECHAT_WEBHOOK_URL, json=payload, timeout=8)
+        resp = requests.post(WECHAT_WEBHOOK_URL, json=payload, timeout=10)
         result = resp.json()
         if resp.status_code == 200 and result.get("errcode") == 0:
             print("\n✅ 企业微信通知发送成功")
         else:
-            print(f"\n❌ 企业微信通知失败: {resp.text}")
+            print(f"\n❌ 企业微信通知失败：{resp.text}")
     except Exception as e:
-        print(f"\n❌ 企业微信发送异常: {str(e)}")
-
+        print(f"\n❌ 企业微信发送异常：{str(e)}")
+        
 
 # ================= 你原版钉钉，保留完整逻辑 =================
 def send_dingtalk_notification(failed_accounts, total_count, success_count):
