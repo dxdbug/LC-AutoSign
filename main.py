@@ -14,6 +14,8 @@ from collections import defaultdict
 TOKEN_LIST = os.getenv('TOKEN_LIST', '')
 DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
 DINGTALK_SECRET = os.getenv('DINGTALK_SECRET', '')
+# 新增：企业微信机器人webhook
+WECHAT_WEBHOOK_URL = os.getenv('WECHAT_WEBHOOK_URL', '')
 
 # 接口配置
 url = 'https://m.jlc.com/api/activity/sign/signIn?source=3'
@@ -57,7 +59,7 @@ def mask_json_customer_code(data):
     else:
         return data
 
-# ======== 推送通知 ========
+# ======== 推送通知：钉钉 ========
 def send_msg_by_dingtalk(title, content):
     if not DINGTALK_WEBHOOK_URL:
         print("⚠️ 钉钉机器人Webhook未配置，跳过钉钉推送")
@@ -102,6 +104,39 @@ def send_msg_by_dingtalk(title, content):
             return result
     except Exception as e:
         print(f"❌ 钉钉消息发送异常: {str(e)}")
+        return None
+
+# ======== 推送通知：企业微信（新增） ========
+def send_msg_by_wechat(title, content):
+    if not WECHAT_WEBHOOK_URL:
+        print("⚠️ 企业微信机器人Webhook未配置，跳过企业微信推送")
+        return None
+
+    # 企业微信支持markdown格式
+    msg = {
+        "msgtype": "markdown",
+        "markdown": {
+            "content": f"## {title}\n{content}"
+        }
+    }
+
+    try:
+        headers = {'Content-Type': 'application/json'}
+        response = requests.post(
+            WECHAT_WEBHOOK_URL,
+            headers=headers,
+            data=json.dumps(msg, ensure_ascii=False)
+        )
+        result = response.json()
+
+        if result.get('errcode') == 0:
+            print("✅ 企业微信消息发送成功")
+            return result
+        else:
+            print(f"❌ 企业微信消息发送失败: {result.get('errmsg', '未知错误')}")
+            return result
+    except Exception as e:
+        print(f"❌ 企业微信消息发送异常: {str(e)}")
         return None
 
 # ======== 单个账号签到逻辑 ========
@@ -192,13 +227,14 @@ def main():
             print(f"⏳ 等待 {wait_time} 秒后处理下一个账号...")
             time.sleep(wait_time)
 
-    print("\n📬 开始检查是否需要发送钉钉通知...")
+    print("\n📬 开始发送通知...")
     if all_dingtalk_results:
         dingtalk_content = "\n\n".join(all_dingtalk_results)
-        print(f"📤 检测到有金豆获取，准备发送钉钉通知...")
+        # 同时推送钉钉 + 企业微信
         send_msg_by_dingtalk("嘉立创签到汇总", dingtalk_content)
+        send_msg_by_wechat("嘉立创签到汇总", dingtalk_content)
     else:
-        print("⏭️ 无金豆获取，跳过钉钉通知")
+        print("⏭️ 无金豆获取，跳过通知")
 
 # ======== 程序入口 ========
 if __name__ == '__main__':
