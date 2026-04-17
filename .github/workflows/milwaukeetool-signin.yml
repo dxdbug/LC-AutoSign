@@ -2,7 +2,7 @@ name: Milwaukeetool Auto Sign
 
 on:
   schedule:
-    - cron: '0 2,8 * * *'  # ✅ 北京时间 10:00、16:00 运行
+    - cron: '0 1,7 * * *'  # ✅ 北京时间 10:00、16:00 运行
 
   workflow_dispatch:
 
