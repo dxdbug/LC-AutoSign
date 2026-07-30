@@ -1,9 +1,9 @@
 name: Milwaukeetool Auto Sign
 
+
 on:
   schedule:
-    - cron: '0 1,7 * * *'  # ✅ 北京时间 10:00、16:00 运行
-
+    - cron: '0 2,8 * * *'  # 🔥 固定每天 北京时间 10:00 运行
   workflow_dispatch:
 
 jobs:
@@ -11,20 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: 校验北京时间（禁止 23:00~07:00）
       run: |
-        # 固定为上海时区，时间绝对准确
-        sudo timedatectl set-timezone Asia/Shanghai
-        BEIJING_HOUR=$(date +'%H')
+        BEIJING_HOUR=$(date -u -d '+8 hours' +'%H')
         echo "当前北京时间：$BEIJING_HOUR 点"
         
         if [ $BEIJING_HOUR -ge 23 ] || [ $BEIJING_HOUR -lt 7 ]; then
-          echo "❌ 当前是夜间 23:00~07:00，任务退出"
+          echo "❌ 当前是 23:00~07:00，禁止签到，任务退出"
           exit 1
         else
-          echo "✅ 时间合规，开始签到"
+          echo "✅ 当前时间合规，允许签到"
         fi
 
     - name: Run Sign Script
