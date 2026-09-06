@@ -21,6 +21,7 @@ MILWAUKEETOOL_CLIENT_ID = os.getenv('MILWAUKEETOOL_CLIENT_ID', '')
 # ========== 通知渠道：全部从环境变量读取 ==========
 WECHAT_WEBHOOK_URL = os.getenv('WECHAT_WEBHOOK_URL', '')
 DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
+FEISHU_WEBHOOK_URL = os.getenv('FEISHU_WEBHOOK_URL', '')
 
 FAILED_LOG = []
 RESULT_LOG = []
@@ -236,6 +237,48 @@ def send_dingtalk_notification(failed_accounts, total_count, success_count):
         print(f"❌ 钉钉发送异常: {str(e)}")
 
 
+# ====================== 新增飞书推送函数 ======================
+def send_feishu_notification(failed_accounts, total_count, success_count):
+    if not FEISHU_WEBHOOK_URL or FEISHU_WEBHOOK_URL.strip() == "":
+        print("\n⚠️  未配置环境变量 FEISHU_WEBHOOK_URL，跳过飞书推送")
+        return
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
+    filtered_result = "\n\n".join(FILTERED_LOG) if FILTERED_LOG else "无需要推送的账号"
+
+    content_text = (
+        f"**Milwaukee 签到结果**\n"
+        f"时间：{now_str}\n\n"
+        f"✅ 成功：{success_count}/{total_count}\n"
+        f"❌ 失败：{len(failed_accounts)}/{total_count}\n\n"
+        f"**失败详情**：\n{fail_details}\n\n"
+        f"**完整结果**：\n{filtered_result[:1500]}"
+    )
+
+    payload = {
+        "msg_type": "post",
+        "content": {
+            "post": {
+                "zh_cn": {
+                    "title": "Milwaukee签到通知",
+                    "content": [[{"tag": "text", "text": content_text}]]
+                }
+            }
+        }
+    }
+
+    try:
+        resp = requests.post(FEISHU_WEBHOOK_URL, json=payload, timeout=10)
+        res = resp.json()
+        if resp.status_code == 200 and res.get("code") == 0:
+            print("✅ 飞书通知发送成功")
+        else:
+            print(f"❌ 飞书通知失败：{resp.text}")
+    except Exception as e:
+        print(f"❌ 飞书发送异常：{str(e)}")
+
+
 # ================= 签到主逻辑（单个账号积分判断） =================
 def signAndList(token, client_id, account_index=1):
     # 签到前查积分
@@ -404,12 +447,13 @@ def main():
     else:
         SEND_ALL_NOTICE = True
 
-    # 仅当需要推送时才调用通知函数
+    # 仅当需要推送时才调用通知函数（新增飞书）
     if SEND_ALL_NOTICE:
         send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
         send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt)
+        send_feishu_notification(FAILED_LOG, total_cnt, success_cnt)
     else:
-        print("\n🔇 跳过所有通知推送（企业微信/钉钉）")
+        print("\n🔇 跳过所有通知推送（企业微信/钉钉/飞书）")
 
     print("\n" + "=" * 60)
     print(f"🏁 完成 | 成功 {success_cnt}/{total_cnt} | 失败 {len(FAILED_LOG)} | 需推送账号 {len(FILTERED_LOG)}")
