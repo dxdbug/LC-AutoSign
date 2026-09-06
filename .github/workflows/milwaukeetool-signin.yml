@@ -1,35 +1,37 @@
 name: Milwaukeetool Auto Sign
 
-
 on:
   schedule:
-    - cron: '0 2,8 * * *'  # 🔥 固定每天 北京时间 10:00 运行
+    - cron: '0 2,8 * * *'
   workflow_dispatch:
 
 jobs:
   sign:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: 校验北京时间（禁止 23:00~07:00）
-      run: |
-        BEIJING_HOUR=$(date -u -d '+8 hours' +'%H')
-        echo "当前北京时间：$BEIJING_HOUR 点"
-        
-        if [ $BEIJING_HOUR -ge 23 ] || [ $BEIJING_HOUR -lt 7 ]; then
-          echo "❌ 当前是 23:00~07:00，禁止签到，任务退出"
-          exit 1
-        else
-          echo "✅ 当前时间合规，允许签到"
-        fi
+      - name: 校验北京时间（禁止 23:00~07:00）
+        run: |
+          BEIJING_HOUR=$(TZ='Asia/Shanghai' date +%H)
+          echo "BEIJING_HOUR=$BEIJING_HOUR" >> $GITHUB_ENV
+          echo "当前北京时间：$BEIJING_HOUR 点"
+          if [ "$BEIJING_HOUR" -ge 23 ] || [ "$BEIJING_HOUR" -lt 7 ]; then
+            echo "❌ 当前是 23:00~07:00，禁止签到，任务退出"
+            exit 1
+          else
+            echo "✅ 当前时间合规，允许签到"
+          fi
 
-    - name: Run Sign Script
-      env:
-        MILWAUKEETOOL_CLIENT_ID: ${{ secrets.MILWAUKEETOOL_CLIENT_ID }}
-        MILWAUKEETOOL_TOKEN_LIST: ${{ secrets.MILWAUKEETOOL_TOKEN_LIST }}
-        WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
-        DINGTALK_WEBHOOK_URL: ${{ secrets.DINGTALK_WEBHOOK_URL }}
-      run: |
-        python milwaukeetool-sign.py
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip requests
+
+      - name: Run Sign Script
+        env:
+          MILWAUKEETOOL_CLIENT_ID: ${{ secrets.MILWAUKEETOOL_CLIENT_ID }}
+          MILWAUKEETOOL_TOKEN_LIST: ${{ secrets.MILWAUKEETOOL_TOKEN_LIST }}
+          WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
+          DINGTALK_WEBHOOK_URL: ${{ secrets.DINGTALK_WEBHOOK_URL }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: python milwaukeetool-sign.py
