@@ -16,6 +16,8 @@ DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
 DINGTALK_SECRET = os.getenv('DINGTALK_SECRET', '')
 # 新增：企业微信机器人webhook
 WECHAT_WEBHOOK_URL = os.getenv('WECHAT_WEBHOOK_URL', '')
+# 新增：飞书机器人webhook
+FEISHU_WEBHOOK_URL = os.getenv('FEISHU_WEBHOOK_URL', '')
 
 # 接口配置
 url = 'https://m.jlc.com/api/activity/sign/signIn?source=3'
@@ -139,6 +141,53 @@ def send_msg_by_wechat(title, content):
         print(f"❌ 企业微信消息发送异常: {str(e)}")
         return None
 
+# ======== 推送通知：飞书（新增） ========
+def send_msg_by_feishu(title, content):
+    if not FEISHU_WEBHOOK_URL:
+        print("⚠️ 飞书机器人Webhook未配置，跳过飞书推送")
+        return None
+
+    # 飞书富文本 post 格式
+    # 将 content 按换行拆成多行，每行一个 text 元素
+    lines = content.split('\n')
+    content_lines = []
+    for line in lines:
+        if line.strip() == '':
+            continue
+        content_lines.append([{"tag": "text", "text": line}])
+
+    payload = {
+        "msg_type": "post",
+        "content": {
+            "post": {
+                "zh_cn": {
+                    "title": title,
+                    "content": content_lines
+                }
+            }
+        }
+    }
+
+    try:
+        headers = {'Content-Type': 'application/json; charset=utf-8'}
+        response = requests.post(
+            FEISHU_WEBHOOK_URL,
+            headers=headers,
+            data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
+            timeout=10
+        )
+        result = response.json()
+
+        if result.get('code') == 0:
+            print("✅ 飞书消息发送成功")
+            return result
+        else:
+            print(f"❌ 飞书消息发送失败: {result.get('msg', '未知错误')}")
+            return result
+    except Exception as e:
+        print(f"❌ 飞书消息发送异常: {str(e)}")
+        return None
+
 # ======== 单个账号签到逻辑 ========
 def sign_in(access_token):
     # 核心修改：每次签到随机使用不同UA，防检测
@@ -230,9 +279,10 @@ def main():
     print("\n📬 开始发送通知...")
     if all_dingtalk_results:
         dingtalk_content = "\n\n".join(all_dingtalk_results)
-        # 同时推送钉钉 + 企业微信
+        # 同时推送钉钉 + 企业微信 + 飞书
         send_msg_by_dingtalk("嘉立创签到汇总", dingtalk_content)
         send_msg_by_wechat("嘉立创签到汇总", dingtalk_content)
+        send_msg_by_feishu("嘉立创签到汇总", dingtalk_content)
     else:
         print("⏭️ 无金豆获取，跳过通知")
 
