@@ -9,14 +9,13 @@ import hashlib
 import base64
 from urllib.parse import quote_plus
 from requests.exceptions import RequestException
-from collections import defaultdict
 
 TOKEN_LIST = os.getenv('TOKEN_LIST', '')
 DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
 DINGTALK_SECRET = os.getenv('DINGTALK_SECRET', '')
-# 新增：企业微信机器人webhook
+# 企业微信机器人webhook
 WECHAT_WEBHOOK_URL = os.getenv('WECHAT_WEBHOOK_URL', '')
-# 新增：飞书机器人webhook
+# 飞书机器人webhook
 FEISHU_WEBHOOK_URL = os.getenv('FEISHU_WEBHOOK_URL', '')
 
 # 接口配置
@@ -46,20 +45,6 @@ def mask_account(account):
     if len(account) >= 4:
         return account[:2] + '****' + account[-2:]
     return '****'
-
-def mask_json_customer_code(data):
-    if isinstance(data, dict):
-        new_data = {}
-        for k, v in data.items():
-            if k == "customerCode" and isinstance(v, str):
-                new_data[k] = v[:1] + "xxxxx" + v[-2:]
-            else:
-                new_data[k] = mask_json_customer_code(v)
-        return new_data
-    elif isinstance(data, list):
-        return [mask_json_customer_code(i) for i in data]
-    else:
-        return data
 
 # ======== 推送通知：钉钉 ========
 def send_msg_by_dingtalk(title, content):
@@ -94,7 +79,8 @@ def send_msg_by_dingtalk(title, content):
         response = requests.post(
             request_url,
             headers=headers,
-            data=json.dumps(msg, ensure_ascii=False).encode('utf-8')
+            data=json.dumps(msg, ensure_ascii=False).encode('utf-8'),
+            timeout=10
         )
         result = response.json()
         
@@ -108,13 +94,12 @@ def send_msg_by_dingtalk(title, content):
         print(f"❌ 钉钉消息发送异常: {str(e)}")
         return None
 
-# ======== 推送通知：企业微信（新增） ========
+# ======== 推送通知：企业微信 ========
 def send_msg_by_wechat(title, content):
     if not WECHAT_WEBHOOK_URL:
         print("⚠️ 企业微信机器人Webhook未配置，跳过企业微信推送")
         return None
 
-    # 企业微信支持markdown格式
     msg = {
         "msgtype": "markdown",
         "markdown": {
@@ -127,7 +112,8 @@ def send_msg_by_wechat(title, content):
         response = requests.post(
             WECHAT_WEBHOOK_URL,
             headers=headers,
-            data=json.dumps(msg, ensure_ascii=False)
+            data=json.dumps(msg, ensure_ascii=False),
+            timeout=10
         )
         result = response.json()
 
@@ -141,64 +127,69 @@ def send_msg_by_wechat(title, content):
         print(f"❌ 企业微信消息发送异常: {str(e)}")
         return None
 
-# ======== 推送通知：飞书（新增） ========
+# ======================【修复后的飞书推送函数】======================
 def send_msg_by_feishu(title, content):
     if not FEISHU_WEBHOOK_URL:
         print("⚠️ 飞书机器人Webhook未配置，跳过飞书推送")
         return None
 
-    # 飞书富文本 post 格式
-    # 将 content 按换行拆成多行，每行一个 text 元素
-    lines = content.split('\n')
-    content_lines = []
-    for line in lines:
-        if line.strip() == '':
-            continue
-        content_lines.append([{"tag": "text", "text": line}])
-
+    # 方案A：改用简单text类型（兼容性最强，不会格式报错，推荐签到脚本使用）
+    # 如果想要富文本post格式，下面保留两套实现
     payload = {
-        "msg_type": "post",
+        "msg_type": "text",
         "content": {
-            "post": {
-                "zh_cn": {
-                    "title": title,
-                    "content": content_lines
-                }
-            }
+            "text": f"【{title}】\n{content}"
         }
     }
 
-    try:
-        headers = {'Content-Type': 'application/json; charset=utf-8'}
-        response = requests.post(
-            FEISHU_WEBHOOK_URL,
-            headers=headers,
-            data=json.dumps(payload, ensure_ascii=False).encode('utf-8'),
-            timeout=10
-        )
-        result = response.json()
+    # ========== 如果你坚持要用富文本post格式，取消下面注释，注释上面text配置 ==========
+    # lines = [line.strip() for line in content.split("\n") if line.strip()]
+    # content_array = []
+    # for line in lines:
+    #     content_array.append([{"tag": "text", "text": line}])
+    # payload = {
+    #     "msg_type": "post",
+    #     "content": {
+    #         "post": {
+    #             "zh_cn": {
+    #                 "title": title[:50],
+    #                 "content": content_array
+    #             }
+    #         }
+    #     }
+    # }
 
-        if result.get('code') == 0:
+    try:
+        headers = {"Content-Type": "application/json;charset=utf-8"}
+        resp = requests.post(
+            FEISHU_WEBHOOK_URL,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers=headers,
+            timeout=15
+        )
+        print(f"🔍飞书原始返回:{resp.text}")
+        res_json = resp.json()
+        # ✅飞书成功判断字段修正：StatusCode ==0
+        if res_json.get("StatusCode") == 0:
             print("✅ 飞书消息发送成功")
-            return result
+            return res_json
         else:
-            print(f"❌ 飞书消息发送失败: {result.get('msg', '未知错误')}")
-            return result
-    except Exception as e:
-        print(f"❌ 飞书消息发送异常: {str(e)}")
+            print(f"❌飞书推送失败｜code:{res_json.get('code')}, msg:{res_json.get('msg')}")
+            return res_json
+    except Exception as err:
+        print(f"❌飞书请求异常:{str(err)}")
         return None
 
 # ======== 单个账号签到逻辑 ========
 def sign_in(access_token):
-    # 核心修改：每次签到随机使用不同UA，防检测
     headers = {
         'X-JLC-AccessToken': access_token,
-        'User-Agent': get_random_ua(),  # 随机UA
+        'User-Agent': get_random_ua(),
     }
 
     try:
         # 1. 获取金豆信息
-        bean_response = requests.get(gold_bean_url, headers=headers)
+        bean_response = requests.get(gold_bean_url, headers=headers, timeout=10)
         bean_response.raise_for_status()
         bean_result = bean_response.json()
 
@@ -206,7 +197,7 @@ def sign_in(access_token):
         integral_voucher = bean_result['data']['integralVoucher']
 
         # 2. 执行签到
-        sign_response = requests.get(url, headers=headers)
+        sign_response = requests.get(url, headers=headers, timeout=10)
         sign_response.raise_for_status()
         sign_result = sign_response.json()
 
@@ -228,7 +219,7 @@ def sign_in(access_token):
                 print(f"✅ [账号{mask_account(customer_code)}] 今日签到成功")
                 return f"✅ 账号({mask_account(customer_code)})：获取{gain_num}个金豆，当前总数：{integral_voucher + gain_num}"
             else:
-                seventh_response = requests.get(seventh_day_url, headers=headers)
+                seventh_response = requests.get(seventh_day_url, headers=headers, timeout=10)
                 seventh_response.raise_for_status()
                 seventh_result = seventh_response.json()
 
@@ -261,15 +252,15 @@ def main():
         return
 
     print(f"🔧 共发现 {len(AccessTokenList)} 个账号需要签到")
-    all_dingtalk_results = []
+    all_results = []
 
     print(f"\n🚀 开始处理所有账号签到")
     for i, token in enumerate(AccessTokenList):
         print(f"📝 处理第 {i+1}/{len(AccessTokenList)} 个账号...")
         
-        result = sign_in(token)
-        if result is not None:
-            all_dingtalk_results.append(result)
+        res = sign_in(token)
+        if res is not None:
+            all_results.append(res)
         
         if i < len(AccessTokenList) - 1:
             wait_time = random.randint(5, 15)
@@ -277,12 +268,11 @@ def main():
             time.sleep(wait_time)
 
     print("\n📬 开始发送通知...")
-    if all_dingtalk_results:
-        dingtalk_content = "\n\n".join(all_dingtalk_results)
-        # 同时推送钉钉 + 企业微信 + 飞书
-        send_msg_by_dingtalk("嘉立创签到汇总", dingtalk_content)
-        send_msg_by_wechat("嘉立创签到汇总", dingtalk_content)
-        send_msg_by_feishu("嘉立创签到汇总", dingtalk_content)
+    if all_results:
+        push_content = "\n\n".join(all_results)
+        send_msg_by_dingtalk("嘉立创签到汇总", push_content)
+        send_msg_by_wechat("嘉立创签到汇总", push_content)
+        send_msg_by_feishu("嘉立创签到汇总", push_content)
     else:
         print("⏭️ 无金豆获取，跳过通知")
 
