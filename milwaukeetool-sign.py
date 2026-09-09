@@ -19,7 +19,6 @@ MILWAUKEETOOL_TOKEN_LIST = os.getenv('MILWAUKEETOOL_TOKEN_LIST', '')
 MILWAUKEETOOL_CLIENT_ID = os.getenv('MILWAUKEETOOL_CLIENT_ID', '')
 
 # ========== 通知渠道：全部从环境变量读取 ==========
-WECHAT_WEBHOOK_URL = os.getenv('WECHAT_WEBHOOK_URL', '')
 DINGTALK_WEBHOOK_URL = os.getenv('DINGTALK_WEBHOOK_URL', '')
 FEISHU_WEBHOOK_URL = os.getenv('FEISHU_WEBHOOK_URL', '')
 
@@ -155,49 +154,6 @@ def format_sign_status(json_data, client_id=None):
         return f"❌ 格式化错误：{str(e)}"
 
 
-# ================= 修复版：企业微信通知（可正常接收） =================
-def send_wechat_notification(failed_accounts, total_count, success_count):
-    if not WECHAT_WEBHOOK_URL or WECHAT_WEBHOOK_URL.strip() == "":
-        print("\n⚠️  未配置环境变量 WECHAT_WEBHOOK_URL，跳过企业微信推送")
-        return
-
-    now_str = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
-    fail_details = "\n".join([f"• {cid}: {reason}" for cid, reason in failed_accounts]) if failed_accounts else "无失败"
-
-    # 账号详情（严格控制长度，避免超长）
-    account_details = ""
-    if FILTERED_LOG:
-        account_details = "\n\n账号详情：\n" + "\n".join(FILTERED_LOG[:8])
-
-    # 企业微信纯文本格式（最简单、最稳定）
-    content = (
-        f"Milwaukee 签到报告\n"
-        f"时间：{now_str}\n"
-        f"成功：{success_count}/{total_count}\n"
-        f"失败：{len(failed_accounts)}/{total_count}\n\n"
-        f"失败详情：\n{fail_details}"
-        f"{account_details}"
-    )
-
-    # 严格截断长度
-    content = content[:1800]
-
-    payload = {
-        "msgtype": "text",
-        "text": {
-            "content": content
-        }
-    }
-
-    try:
-        resp = requests.post(WECHAT_WEBHOOK_URL, json=payload, timeout=10)
-        result = resp.json()
-        if resp.status_code == 200 and result.get("errcode") == 0:
-            print("\n✅ 企业微信通知发送成功")
-        else:
-            print(f"\n❌ 企业微信通知失败：{resp.text}")
-    except Exception as e:
-        print(f"\n❌ 企业微信发送异常：{str(e)}")
         
 
 # ================= 你原版钉钉，保留完整逻辑 =================
@@ -449,11 +405,10 @@ def main():
 
     # 仅当需要推送时才调用通知函数（新增飞书）
     if SEND_ALL_NOTICE:
-        send_wechat_notification(FAILED_LOG, total_cnt, success_cnt)
         send_dingtalk_notification(FAILED_LOG, total_cnt, success_cnt)
         send_feishu_notification(FAILED_LOG, total_cnt, success_cnt)
     else:
-        print("\n🔇 跳过所有通知推送（企业微信/钉钉/飞书）")
+        print("\n🔇 跳过所有通知推送（钉钉/飞书）")
 
     print("\n" + "=" * 60)
     print(f"🏁 完成 | 成功 {success_cnt}/{total_cnt} | 失败 {len(FAILED_LOG)} | 需推送账号 {len(FILTERED_LOG)}")
