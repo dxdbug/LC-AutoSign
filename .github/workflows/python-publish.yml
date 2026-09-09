@@ -28,5 +28,6 @@ jobs:
       env:
         TOKEN_LIST: ${{ secrets.TOKEN_LIST }}
         DINGTALK_WEBHOOK_URL: ${{ secrets.DINGTALK_WEBHOOK_URL }}
+        FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
       run: |
         python main.py
