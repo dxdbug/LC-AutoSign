@@ -127,14 +127,13 @@ def send_msg_by_wechat(title, content):
         print(f"❌ 企业微信消息发送异常: {str(e)}")
         return None
 
-# ======================【修复后的飞书推送函数】======================
+# ======================【修复完成的飞书推送函数】======================
 def send_msg_by_feishu(title, content):
     if not FEISHU_WEBHOOK_URL:
         print("⚠️ 飞书机器人Webhook未配置，跳过飞书推送")
         return None
 
-    # 方案A：改用简单text类型（兼容性最强，不会格式报错，推荐签到脚本使用）
-    # 如果想要富文本post格式，下面保留两套实现
+    # text纯文本模式，兼容性最强
     payload = {
         "msg_type": "text",
         "content": {
@@ -142,35 +141,18 @@ def send_msg_by_feishu(title, content):
         }
     }
 
-    # ========== 如果你坚持要用富文本post格式，取消下面注释，注释上面text配置 ==========
-    # lines = [line.strip() for line in content.split("\n") if line.strip()]
-    # content_array = []
-    # for line in lines:
-    #     content_array.append([{"tag": "text", "text": line}])
-    # payload = {
-    #     "msg_type": "post",
-    #     "content": {
-    #         "post": {
-    #             "zh_cn": {
-    #                 "title": title[:50],
-    #                 "content": content_array
-    #             }
-    #         }
-    #     }
-    # }
-
     try:
         headers = {"Content-Type": "application/json;charset=utf-8"}
         resp = requests.post(
             FEISHU_WEBHOOK_URL,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            json=payload,
             headers=headers,
             timeout=15
         )
         print(f"🔍飞书原始返回:{resp.text}")
         res_json = resp.json()
-        # ✅飞书成功判断字段修正：StatusCode ==0
-        if res_json.get("StatusCode") == 0:
+        # ✅飞书自定义机器人成功判断字段 code == 0
+        if res_json.get("code") == 0:
             print("✅ 飞书消息发送成功")
             return res_json
         else:
@@ -205,10 +187,10 @@ def sign_in(access_token):
             message = sign_result.get('message', '未知错误')
             if '已经签到' in message:
                 print(f"ℹ️ [账号{mask_account(customer_code)}] 今日已签到")
-                return None
+                return f"ℹ️ 账号({mask_account(customer_code)})：今日已签到，金豆：{integral_voucher}"
             else:
                 print(f"❌ [账号{mask_account(customer_code)}] 签到失败 - {message}")
-                return None
+                return f"❌ 账号({mask_account(customer_code)})：签到失败，原因：{message}"
 
         data = sign_result.get('data', {})
         gain_num = data.get('gainNum') if data else None
@@ -228,20 +210,20 @@ def sign_in(access_token):
                     return f"🎉 账号({mask_account(customer_code)})：第七天签到成功，当前金豆总数：{integral_voucher + 8}"
                 else:
                     print(f"ℹ️ [账号{mask_account(customer_code)}] 第七天签到失败，无金豆获取")
-                    return None
+                    return f"ℹ️ 账号({mask_account(customer_code)})：签到成功，第七天奖励领取失败"
         else:
             print(f"ℹ️ [账号{mask_account(customer_code)}] 今日已签到或签到失败")
-            return None
+            return f"ℹ️ 账号({mask_account(customer_code)})：今日已签到，金豆：{integral_voucher}"
 
     except RequestException as e:
         print(f"❌ [账号{mask_account(access_token)}] 网络请求失败: {str(e)}")
-        return None
+        return f"❌ 账号({mask_account(access_token)})：网络异常 {str(e)}"
     except KeyError as e:
         print(f"❌ [账号{mask_account(access_token)}] 数据解析失败: 缺少键 {str(e)}")
-        return None
+        return f"❌ 账号({mask_account(access_token)})：数据解析失败，缺少字段 {str(e)}"
     except Exception as e:
         print(f"❌ [账号{mask_account(access_token)}] 未知错误: {str(e)}")
-        return None
+        return f"❌ 账号({mask_account(access_token)})：未知异常 {str(e)}"
 
 # ======== 主函数 ========
 def main():
@@ -249,6 +231,10 @@ def main():
 
     if not AccessTokenList:
         print("❌ 请设置 TOKENS")
+        push_content = "❌ 未配置TOKEN_LIST，无账号执行签到"
+        send_msg_by_dingtalk("嘉立创签到汇总", push_content)
+        send_msg_by_wechat("嘉立创签到汇总", push_content)
+        send_msg_by_feishu("嘉立创签到汇总", push_content)
         return
 
     print(f"🔧 共发现 {len(AccessTokenList)} 个账号需要签到")
@@ -259,8 +245,7 @@ def main():
         print(f"📝 处理第 {i+1}/{len(AccessTokenList)} 个账号...")
         
         res = sign_in(token)
-        if res is not None:
-            all_results.append(res)
+        all_results.append(res)
         
         if i < len(AccessTokenList) - 1:
             wait_time = random.randint(5, 15)
@@ -268,13 +253,10 @@ def main():
             time.sleep(wait_time)
 
     print("\n📬 开始发送通知...")
-    if all_results:
-        push_content = "\n\n".join(all_results)
-        send_msg_by_dingtalk("嘉立创签到汇总", push_content)
-        send_msg_by_wechat("嘉立创签到汇总", push_content)
-        send_msg_by_feishu("嘉立创签到汇总", push_content)
-    else:
-        print("⏭️ 无金豆获取，跳过通知")
+    push_content = "\n\n".join(all_results)
+    send_msg_by_dingtalk("嘉立创签到汇总", push_content)
+    send_msg_by_wechat("嘉立创签到汇总", push_content)
+    send_msg_by_feishu("嘉立创签到汇总", push_content)
 
 # ======== 程序入口 ========
 if __name__ == '__main__':
