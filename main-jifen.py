@@ -23,7 +23,7 @@
 
 环境变量配置列表：
   WECHAT_WORK_WEBHOOK  企业微信群机器人 Webhook（可留空，留空则不推送企微）
-  FEISHU_WEBHOOK       飞书群机器人 Webhook（可留空，留空则不推送飞书）
+  FEISHU_WEBHOOK_URL   飞书群机器人 Webhook（可留空，留空则不推送飞书）
   LCSC_TOKEN_LIST      立创商城账号凭证（X-LC-AccessToken），多个用英文逗号分隔（必填）
   AUTO_DRAW_BLIND_BOX  是否自动抽盲盒，true/false，默认 true（可选）
 
@@ -46,7 +46,7 @@ from requests.exceptions import RequestException
 # 替换为你的企业微信群机器人Webhook地址；留空则跳过推送
 WECHAT_WORK_WEBHOOK = ""
 # 飞书机器人webhook地址；优先读取环境变量 FEISHU_WEBHOOK
-FEISHU_WEBHOOK = ""
+FEISHU_WEBHOOK_URL = ""
 # ==============================================================================
 
 # 接口配置
@@ -179,7 +179,7 @@ def send_msg_by_feishu(title, content):
     飞书自定义机器人推送，飞书markdown语法注意：不支持###大标题，使用**加粗标题**
     https://open.feishu.cn/document/ukTMukTMukTM/ucTM5YjL3ETO24yNxkjN
     """
-    webhook_url = os.getenv("FEISHU_WEBHOOK", FEISHU_WEBHOOK)
+    webhook_url = os.getenv("FEISHU_WEBHOOK_URL", FEISHU_WEBHOOK_URL)
     if not webhook_url:
         print("ℹ️ 未配置飞书Webhook，跳过飞书推送")
         return False
