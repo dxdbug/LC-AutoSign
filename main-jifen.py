@@ -1,8 +1,7 @@
 # -*- coding: UTF-8 -*-
 """
 立创商城「每月开盲盒」活动 —— 自动签到 + 自动抽盲盒脚本
-新增：飞书群机器人推送 FEISHU_WEBHOOK 环境变量
-
+修复飞书推送：改用post富文本格式，规避markdown语法报错
 思路参照 main-jindou.py（嘉立创签到）：
   1. 从环境变量 LCSC_TOKEN_LIST 读取账号凭证（多个用英文逗号分隔；名字特意与嘉立创的 TOKEN_LIST 区分，避免混淆）
   2. 调用盲盒首页接口获取 uuid、签到状态、抽奖次数
@@ -176,29 +175,41 @@ def send_msg_by_wechat_work(title, content):
 
 def send_msg_by_feishu(title, content):
     """
-    飞书自定义机器人推送，飞书markdown语法注意：不支持###大标题，使用**加粗标题**
-    https://open.feishu.cn/document/ukTMukTMukTM/ucTM5YjL3ETO24yNxkjN
+    飞书自定义机器人推送 使用post富文本格式，规避markdown语法报错
     """
     webhook_url = os.getenv("FEISHU_WEBHOOK_URL", FEISHU_WEBHOOK_URL)
     if not webhook_url:
         print("ℹ️ 未配置飞书Webhook，跳过飞书推送")
         return False
-    #飞书markdown，标题用**加粗**
-    md_text = f"**{title}**\n\n{content}"
+
+    lines = content.split("\n")
+    content_blocks = []
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        content_blocks.append([{"tag": "text", "text": s}])
+
     payload = {
-        "msg_type": "markdown",
+        "msg_type": "post",
         "content": {
-            "text": md_text
+            "post": {
+                "zh_cn": {
+                    "title": title,
+                    "content": content_blocks
+                }
+            }
         }
     }
     try:
         headers = {"Content-Type": "application/json"}
-        resp = requests.post(webhook_url, data=json.dumps(payload), headers=headers, timeout=20)
+        resp = requests.post(webhook_url, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"), headers=headers, timeout=20)
         ret = resp.json()
         if ret.get("code") == 0:
+            print(f"✅ 飞书通知发送成功！")
             return True
         else:
-            print(f"❌ 飞书推送失败：{ret.get('msg', '')}")
+            print(f"❌ 飞书推送失败 code={ret.get('code')} msg={ret.get('msg','')}")
             return False
     except RequestException as e:
         print(f"❌ 飞书推送网络异常：{str(e)}")
