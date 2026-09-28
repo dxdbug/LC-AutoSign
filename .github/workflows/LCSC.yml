@@ -1,4 +1,4 @@
-name:LCSC Auto Sign
+name: LCSC Auto Sign
 
 on:
   schedule:
