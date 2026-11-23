@@ -2,7 +2,7 @@ name: JLC Auto Sign
 
 on:
   schedule:
-    - cron: '0 2,8 * * *'  # 🔥 固定每天 北京时间 10:00 运行
+     - cron: '0 16,22,4,10 * * *'  # 每6小时执行 UTC 时间
   workflow_dispatch:
 
 jobs:
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
 
     - name: 校验北京时间（禁止 23:00~07:00）
       run: |
